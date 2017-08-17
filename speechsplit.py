@@ -77,12 +77,10 @@ def loudness_filter(min=-float('inf'), max=float('inf')):
 SPEAKER_CLASS, TRANSLATOR_CLASS = 1, 2
 
 
-def build_training_data(speaker_audio, translator_audio, filter):
+def build_training_data(speaker_features, translator_features, filter):
 
-    speaker_mfcc, translator_mfcc = [
-        filter(*extract_audio_features(audio))
-        for audio in [speaker_audio, translator_audio]]
-
+    speaker_mfcc, translator_mfcc = [filter(*speaker_features),
+                                     filter(*translator_features)]
     X_all = np.concatenate((speaker_mfcc, translator_mfcc))
     y_all = np.concatenate([np.repeat(y, len(mfcc)) for y, mfcc in [
         (SPEAKER_CLASS, speaker_mfcc),
@@ -96,6 +94,15 @@ def score_prediction(clf, features, target):
     return f1_score(target, y_pred)
 
 
+def train_and_score(clf, X_all, y_all):
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_all, y_all, test_size=.20, random_state=0)
+    clf.fit(X_train, y_train)
+    f1_score_train = score_prediction(clf, X_train, y_train)
+    f1_score_test = score_prediction(clf, X_test, y_test)
+    return f1_score_train, f1_score_test
+
+
 GRID_SEARCH_PARAMETERS = [
     {'C': [1, 10, 100], 'kernel': ['linear']},
     {'C': [1, 10, 100], 'kernel': ['rbf'], 'gamma': [0.01, 0.001, 0.0001]},
@@ -103,23 +110,13 @@ GRID_SEARCH_PARAMETERS = [
 
 
 def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_all, y_all, test_size=.20, random_state=0)
-
     clf = SVC(random_state=0)
     f1_scorer = make_scorer(f1_score)
-    grid_obj = GridSearchCV(clf, parameters, scoring=f1_scorer, n_jobs=4)
-    grid_obj.fit(X_train, y_train)
-    clf = grid_obj.best_estimator_
-
-    f1_score_train = score_prediction(clf, X_train, y_train)
-    f1_score_test = score_prediction(clf, X_test, y_test)
-
+    grid = GridSearchCV(clf, parameters, scoring=f1_scorer, n_jobs=4)
+    f1_score_train, f1_score_test = train_and_score(grid, X_all, y_all)
     print('F1 score on the train an test data:')
     print(f1_score_train, f1_score_test)
-
-    return clf
+    return grid.best_estimator_
 
 
 def predict(clf, audio, filter):

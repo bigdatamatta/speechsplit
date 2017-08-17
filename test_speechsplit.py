@@ -1,7 +1,6 @@
 
 import numpy as np
 import pytest
-from mock import call, patch
 
 from speechsplit import (SPEAKER_CLASS, TRANSLATOR_CLASS, build_training_data,
                          smooth_bumps)
@@ -50,10 +49,8 @@ def test_build_training_data(
     speaker_features, translator_features, X_all, y_all = map(
         np.array, (speaker_features, translator_features, X_all, y_all))
 
-    with patch('speechsplit.extract_audio_features') as extract_mock:
-        extract_mock.side_effect = [speaker_features, translator_features]
-        X, y = build_training_data(
-            1111, 2222, lambda mfcc, loudness: mfcc[loudness.astype(bool)])
-        assert extract_mock.call_args_list == [call(1111), call(2222)]
-        assert all(X_all == X)
-        assert all(y_all == y)
+    X, y = build_training_data(
+        speaker_features, translator_features,
+        lambda mfcc, loudness: mfcc[loudness.astype(bool)])
+    assert all(X_all == X)
+    assert all(y_all == y)
