@@ -2,7 +2,6 @@
 from itertools import groupby
 
 import numpy as np
-import pydub
 
 
 def get_first_and_last_from_iterator(iterator):
