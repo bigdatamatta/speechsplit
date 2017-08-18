@@ -1,6 +1,8 @@
 
 from itertools import groupby
 
+import numpy as np
+
 
 def get_first_and_last_from_iterator(iterator):
     "Returns the first and last items from an iterator"
@@ -10,16 +12,11 @@ def get_first_and_last_from_iterator(iterator):
     return first, last
 
 
-def find_value_intervals(data, value):
-    """Returns the list of intervals in data
-    that contain continuous occurrences of value"""
-
-    def interval(group):
-        first, last = get_first_and_last_from_iterator(i for i, v in group)
-        return first, last + 1
-
-    value_groups = groupby(enumerate(data), lambda (i, v): v == value)
-    return [interval(g) for k, g in value_groups if k]
+def intervals_where(mask):
+    where = np.where(mask)[0]
+    for __, group in groupby(enumerate(where), lambda (i, x): x - i):
+        first, last = get_first_and_last_from_iterator(x for _, x in group)
+        yield first, last + 1
 
 
 def timerepr(millis):

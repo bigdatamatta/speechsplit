@@ -6,14 +6,14 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from utils import find_value_intervals
+from utils import intervals_where
 
 # DATA TREATMENT  #######################################################
 
 
 def smooth_bumps(data, value, width, margin):
-    intervals = find_value_intervals(data, value)
-    for start, end in intervals:
+
+    for start, end in intervals_where(data == value):
 
         # if the interval is a narrow bump ...
         if end - start <= width:
