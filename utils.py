@@ -32,9 +32,3 @@ def timerepr(millis):
         return '{:02d}:{:02d}:{:02d}.{:03d}'.format(hours, minutes, seconds, millis)
     else:
         return '{:02d}:{:02d}.{:03d}'.format(minutes, seconds, millis)
-
-
-class AudioSegment(pydub.AudioSegment):
-
-    def __repr__(self):
-        return 'Audio (length: {})'.format(timerepr(len(self)))
