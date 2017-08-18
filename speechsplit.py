@@ -1,6 +1,6 @@
 
 import numpy as np
-from python_speech_features import mfcc
+import python_speech_features
 from sklearn.cross_validation import train_test_split
 from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
@@ -30,17 +30,21 @@ def smooth_bumps(data, value, width, margin):
 
 # FEATURE EXTRACTION  #######################################################
 
+
 def get_numpy_array_of_samples(audio):
     return np.fromstring(audio._data, dtype=np.dtype(audio.array_type))
 
 
-def extract_audio_features(audio, window_length=25, window_step=10):
+def extract_audio_features(audio, window_length=25, window_step=10,
+                           max_windows_per_segment=100000):
     """Compute audio features of pydub audio:
         Mel-filterbank energy features and loudness (in dBFS).
 
     :param audio:
     :param window_length: the length of the analysis window in milliseconds.
     :param window_step: the step between successive windows in milliseconds.
+    :param max_windows_per_segment: max lenght of segment for mfcc computation,
+                                    in number of windows
 
     :returns: 2 values:
         first value is a numpy array
@@ -50,26 +54,58 @@ def extract_audio_features(audio, window_length=25, window_step=10):
         with the loudness measurements (in dBFS)
         of each corresponding coefficients window
     """
-    signal = get_numpy_array_of_samples(audio)
-    coefs = mfcc(signal, audio.frame_rate,
-                 winlen=window_length / 1000.0, winstep=window_step / 1000.0,
-                 appendEnergy=False)[:, 1:13]
+    def build_mfcc(segment):
+        signal = get_numpy_array_of_samples(segment)
+        return python_speech_features.mfcc(
+            signal, segment.frame_rate,
+            winlen=window_length / 1000.0, winstep=window_step / 1000.0,
+            appendEnergy=False)[:, 1:13]
+
+    # Build mfcc in slices to avoid out of memory issues
+    # We need some margin before and after the slices,
+    # otherwise windowing would distort the values at the edges
+
+    mfcc_margin = 10  # in number of windows
+    msg = 'Segmentation size has to be greater than {}'.format(mfcc_margin)
+    assert max_windows_per_segment > mfcc_margin, msg
+
+    audio_margin = mfcc_margin * window_step
+    audio_segmentation_size = max_windows_per_segment * window_step
+
+    ranges = [(0 if start == 0 else start - audio_margin,  # splice start
+               start + audio_segmentation_size + audio_margin,   # slice end
+               0 if start == 0 else mfcc_margin  # result offset
+               )
+              for start in range(0, len(audio), audio_segmentation_size)]
+
+    mfcc = np.concatenate([
+        build_mfcc(audio[start:end])[
+            result_offset:result_offset + max_windows_per_segment]
+        for start, end, result_offset in ranges
+    ])
 
     def gen_dBFS():
         "Generate the sequence of loudness measures (dBFS) of the windows"
-        for index in range(len(coefs)):
+        for index in range(len(mfcc)):
             start = index * window_step
             end = start + window_length
             yield audio[start:end].dBFS
 
-    loudness = np.fromiter(gen_dBFS(), dtype=np.dtype(float), count=len(coefs))
+    loudness = np.fromiter(gen_dBFS(), dtype=np.dtype(float), count=len(mfcc))
 
-    return coefs, loudness
+    return mfcc, loudness
 
 
 def loudness_filter(min=-float('inf'), max=float('inf')):
     return lambda mfcc, loudness: mfcc[(loudness >= min) & (loudness < max)]
 
+
+def louder_than(dbfs):
+    return lambda mfcc, loudness: mfcc[loudness >= dbfs]
+
+
+def split_by_silence(audio, silence_thresh, min_silence_len=500):
+    pass
 
 # CLASSIFICATION ############################################################
 
@@ -120,6 +156,6 @@ def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
 
 
 def predict(clf, audio, filter):
-    coefs = filter(*extract_audio_features(audio))
-    pred = clf.predict(coefs)
+    mfcc = filter(*extract_audio_features(audio))
+    pred = clf.predict(mfcc)
     return [100 * np.count_nonzero(pred == k) / float(len(pred)) for k in (0, 1)]

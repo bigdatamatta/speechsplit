@@ -1,9 +1,10 @@
 
 import numpy as np
 import pytest
+from pydub.generators import Sine
 
 from speechsplit import (SPEAKER_CLASS, TRANSLATOR_CLASS, build_training_data,
-                         smooth_bumps)
+                         extract_audio_features, smooth_bumps)
 
 smooth_bumps_examples = '''
 _______________|
@@ -28,6 +29,24 @@ def test_smooth_bumps(data, output):
 
 SPE, TRA = SPEAKER_CLASS, TRANSLATOR_CLASS
 ___, BIG = False, True
+
+
+AUDIO_STUB = Sine(440).to_audio_segment(10100)
+
+
+@pytest.mark.parametrize('size', [100, 333])
+def test_split_does_not_change_extract_audio_features(size):
+    assert len(AUDIO_STUB) == 10100
+    mfcc1, loud1 = extract_audio_features(AUDIO_STUB)  # no segmentation
+    mfcc2, loud2 = extract_audio_features(
+        AUDIO_STUB, max_windows_per_segment=size)
+    assert np.all(np.isclose(mfcc1, mfcc2))
+    assert np.all(np.isclose(loud1, loud2))
+
+
+@pytest.mark.xfail(raises=AssertionError)
+def test_split_too_small_in_extract_audio_features():
+    extract_audio_features(AUDIO_STUB, max_windows_per_segment=10)
 
 
 @pytest.mark.parametrize(
