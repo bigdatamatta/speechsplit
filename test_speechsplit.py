@@ -34,6 +34,10 @@ ___, BIG = False, True
 AUDIO_STUB = Sine(440).to_audio_segment(10100)
 
 
+# remove lru caching for testing
+extract_audio_features = extract_audio_features.__wrapped__
+
+
 @pytest.mark.parametrize('size', [100, 333])
 def test_split_does_not_change_extract_audio_features(size):
     assert len(AUDIO_STUB) == 10100

@@ -1,6 +1,5 @@
 
 import numpy as np
-import pydub
 import python_speech_features
 from functools32 import lru_cache
 from sklearn.cross_validation import train_test_split
@@ -8,7 +7,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from utils import intervals_where, timerepr
+from utils import intervals_where
 
 # DATA TREATMENT  #######################################################
 
@@ -37,6 +36,7 @@ def get_numpy_array_of_samples(audio):
     return np.fromstring(audio._data, dtype=np.dtype(audio.array_type))
 
 
+@lru_cache()
 def extract_audio_features(audio, window_length=25, window_step=10,
                            max_windows_per_segment=100000):
     """Compute audio features of pydub audio:
@@ -98,34 +98,20 @@ def extract_audio_features(audio, window_length=25, window_step=10,
     return mfcc, loudness
 
 
+def mfcc(audio):
+    return extract_audio_features(audio)[0]
+
+
+def loudness(audio):
+    return extract_audio_features(audio)[1]
+
+
 def loudness_filter(min=-float('inf'), max=float('inf')):
     return lambda mfcc, loudness: mfcc[(loudness >= min) & (loudness < max)]
 
 
 def louder_than(dbfs):
     return lambda mfcc, loudness: mfcc[loudness >= dbfs]
-
-
-class AudioSegment(pydub.AudioSegment):
-
-    def __init__(self, *args, **kwargs):
-        super(AudioSegment, self).__init__(*args, **kwargs)
-
-    @property
-    @lru_cache()
-    def features(self):
-        return extract_audio_features(self)
-
-    @property
-    def mfcc(self):
-        return self.features[0]
-
-    @property
-    def loudness(self):
-        return self.features[1]
-
-    def __repr__(self):
-        return 'Audio (length: {})'.format(timerepr(len(self)))
 
 
 def split_by_silence(audio, silence_thresh, min_silence_len=500):

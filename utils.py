@@ -2,6 +2,7 @@
 from itertools import groupby
 
 import numpy as np
+from pydub import AudioSegment
 
 
 def get_first_and_last_from_iterator(iterator):
@@ -31,3 +32,11 @@ def timerepr(millis):
         return '{:02d}:{:02d}:{:02d}.{:03d}'.format(hours, minutes, seconds, millis)
     else:
         return '{:02d}:{:02d}.{:03d}'.format(minutes, seconds, millis)
+
+
+# monkey patch AudioSegment __repr__ for convenience
+def audio_segment_repr_patch(self):
+    return 'Audio (length: {})'.format(timerepr(len(self)))
+
+
+AudioSegment.__repr__ = audio_segment_repr_patch
