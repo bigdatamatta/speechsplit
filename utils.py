@@ -36,7 +36,7 @@ def timerepr(millis):
 
 # monkey patch AudioSegment __repr__ for convenience
 def audio_segment_repr_patch(self):
-    return 'Audio (length: {})'.format(timerepr(len(self)))
+    return 'Audio (length: {}, dB: {:.2f})'.format(timerepr(len(self)), self.dBFS)
 
 
 AudioSegment.__repr__ = audio_segment_repr_patch

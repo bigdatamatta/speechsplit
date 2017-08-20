@@ -80,11 +80,17 @@ def extract_audio_features(audio, window_length=25, window_step=10,
                )
               for start in range(0, len(audio), audio_segmentation_size)]
 
-    mfcc = np.concatenate([
+    mfcc_segments = [
         build_mfcc(audio[start:end])[
             result_offset:result_offset + max_windows_per_segment]
         for start, end, result_offset in ranges
-    ])
+    ]
+
+    # the mfcc conputation discards one window at the end
+    # to keep things tidy we repeat the last window (of the last segment)
+    mfcc_segments.append(mfcc_segments[-1][-1:])
+
+    mfcc = np.concatenate(mfcc_segments)
 
     def gen_dBFS():
         "Generate the sequence of loudness measures (dBFS) of the windows"
@@ -98,11 +104,11 @@ def extract_audio_features(audio, window_length=25, window_step=10,
     return mfcc, loudness
 
 
-def mfcc(audio):
+def get_mfcc(audio):
     return extract_audio_features(audio)[0]
 
 
-def loudness(audio):
+def get_loudness(audio):
     return extract_audio_features(audio)[1]
 
 
@@ -114,8 +120,57 @@ def louder_than(dbfs):
     return lambda mfcc, loudness: mfcc[loudness >= dbfs]
 
 
-def split_by_silence(audio, silence_thresh, min_silence_len=500):
+def detect_max_silence_loudness():
+    # TODO
     pass
+
+
+def split_by_silence(audio, max_silence_loudness, min_silence_len=50):
+    '''Splits audio by silence segments
+
+    based on the loudness feature array from windowed audio
+
+    :param audio:
+    :param max_silence_loudness: maximum loudness of silence windows
+    :param min_silence_len: minimum lenght of silence (in number of windows)
+    '''
+    loudness = get_loudness(audio)
+    intervals = intervals_where(loudness > max_silence_loudness)
+    starts_and_ends = zip(*intervals)
+    if not starts_and_ends:
+        return []
+
+    #  ....XXXXXXX.....XXXXXX...XXXXXX...
+    # e    s      e    s     e  s        e
+    # 0    start  end                    len(audio)
+    # <--->         silences range from previous end to start
+    #      <----->  non-silences range from start to end
+    # <---------->  splits range from previous end to end
+    #               (they include previous silence)
+
+    starts, ends = starts_and_ends
+    # zero as a virtual first end and last end as length
+    ends = (0,) + ends[:-1] + (len(loudness),)
+    silences = zip(ends, starts)  # from previous end to start
+    splits = zip(ends, ends[1:])  # from previous end to end
+
+    def gen_splits():
+        silences_and_splits = iter(zip(silences, splits))
+        _, prev = next(silences_and_splits)
+
+        for (silence_start, silence_end), split in silences_and_splits:
+            len_silence = silence_end - silence_start
+            if len_silence >= min_silence_len:
+                # do split
+                yield prev
+                prev = split
+            else:
+                # don't split => join this split to previous
+                prev = (prev[0], split[1])
+        yield prev
+
+    return list(gen_splits())
+
 
 # CLASSIFICATION ############################################################
 
