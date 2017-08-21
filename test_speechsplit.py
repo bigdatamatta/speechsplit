@@ -3,8 +3,7 @@ import pytest
 from pydub.generators import Sine
 
 from speechsplit import (SPEAKER_CLASS, TRANSLATOR_CLASS, build_training_data,
-                         extract_audio_features, smooth_bumps,
-                         split_by_silence)
+                         extract_audio_features, smooth_bumps)
 
 
 def example_lines(example):
@@ -78,54 +77,6 @@ def test_split_does_not_change_extract_audio_features(size):
 @pytest.mark.xfail(raises=AssertionError)
 def test_split_too_small_in_extract_audio_features():
     extract_audio_features(AUDIO_STUB, max_windows_per_segment=10)
-
-
-# examples of how split by silence must work
-# each X corresponds to a loud audio section of 100 ms
-# each dot (.) corresponds to a silent audio section of 100 ms
-# each space marks a split point
-# numbers mark the starts of split intervals
-silence_split_examples = pairs(example_lines('''
-________________________________________
-# only silence
- .....
- 0
-________________________________________
-# only NON silence
- XXXXX
-#012345
- 0    5
-________________________________________
-# starting and finishing WITHOUT silence
-
- XX ....XXX.XX
-#01 23456789012
- 0  2         12
-________________________________________
-# starting and finishing WITH silence
-
- ....XXX ...XX.XXX ...XX...
-#0123456 789012345 678901234
- 0       7         16      24
-________________________________________
-'''))
-LOUD_OR_SILENT = {'X': AUDIO_STUB[:100],                  # loud
-                  '.': AUDIO_STUB[:100].apply_gain(-40)}  # quiet
-silence_split_examples = [
-    (sum(LOUD_OR_SILENT[w] for w in segment if w in 'X.'),
-     [int(s) * 10 for s in starts.split()])
-    for segment, starts in silence_split_examples
-]
-
-assert LOUD_OR_SILENT['X'].dBFS > -20
-assert LOUD_OR_SILENT['.'].dBFS < -20
-
-
-@pytest.mark.parametrize('audio, starts', silence_split_examples)
-def test_split_by_silence(audio, starts):
-    intervals = zip(starts, starts[1:])
-    assert intervals == split_by_silence(
-        audio, max_silence_loudness=-20, min_silence_len=20)
 
 
 @pytest.mark.parametrize(

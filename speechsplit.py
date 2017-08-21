@@ -7,7 +7,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from utils import intervals_where, rolling_measure
+from utils import intervals_where
 
 # DATA TREATMENT  #######################################################
 
@@ -119,62 +119,6 @@ def loudness_filter(min=-float('inf'), max=float('inf')):
 
 def louder_than(dbfs):
     return lambda mfcc, loudness: mfcc[loudness >= dbfs]
-
-
-def detect_silence_level(audio, percentile=25, window_len=1000):
-    loudness = get_loudness(audio)
-    # each window has 10 ms => measure every 100 * 10 ms = 1 second silence
-    max_series = rolling_measure(loudness, np.max, window=100)
-    return np.percentile(max_series, percentile)
-
-
-def split_by_silence(audio, max_silence_loudness, min_silence_len=500):
-    '''Splits audio by silence segments
-
-    based on the loudness feature array from windowed audio
-
-    :param audio:
-    :param max_silence_loudness: maximum loudness of silence windows
-    :param min_silence_len: minimum lenght of silence (in milliseconds)
-
-    :returns: intervals of splits, mesured in number of windows
-    '''
-    loudness = get_loudness(audio)
-    intervals = intervals_where(loudness > max_silence_loudness)
-    starts_and_ends = zip(*intervals)
-    if not starts_and_ends:
-        return []
-
-    #  ....XXXXXXX.....XXXXXX...XXXXXX...
-    # e    s      e    s     e  s        e
-    # 0    start  end                    len(audio)
-    # <--->         silences range from previous end to start
-    #      <----->  non-silences range from start to end
-    # <---------->  splits range from previous end to end
-    #               (they include previous silence)
-
-    starts, ends = starts_and_ends
-    # zero as a virtual first end and last end as length
-    ends = (0,) + ends[:-1] + (len(loudness),)
-    silences = zip(ends, starts)  # from previous end to start
-    splits = zip(ends, ends[1:])  # from previous end to end
-
-    def gen_splits():
-        silences_and_splits = iter(zip(silences, splits))
-        _, prev = next(silences_and_splits)
-
-        for (silence_start, silence_end), split in silences_and_splits:
-            len_silence = silence_end - silence_start
-            if len_silence >= min_silence_len / WINDOW_STEP:
-                # do split
-                yield prev
-                prev = split
-            else:
-                # don't split => join this split to previous
-                prev = (prev[0], split[1])
-        yield prev
-
-    return list(gen_splits())
 
 
 # CLASSIFICATION ############################################################
