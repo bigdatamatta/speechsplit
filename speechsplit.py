@@ -7,7 +7,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from utils import intervals_where
+from utils import intervals_where, rolling_measure
 
 # DATA TREATMENT  #######################################################
 
@@ -36,15 +36,16 @@ def get_numpy_array_of_samples(audio):
     return np.fromstring(audio._data, dtype=np.dtype(audio.array_type))
 
 
+WINDOW_STEP = 10    # the step between successive windows in milliseconds
+WINDOW_LENGTH = 25  # the length of the analysis window in milliseconds
+
+
 @lru_cache()
-def extract_audio_features(audio, window_length=25, window_step=10,
-                           max_windows_per_segment=100000):
+def extract_audio_features(audio, max_windows_per_segment=100000):
     """Compute audio features of pydub audio:
         Mel-filterbank energy features and loudness (in dBFS).
 
     :param audio:
-    :param window_length: the length of the analysis window in milliseconds.
-    :param window_step: the step between successive windows in milliseconds.
     :param max_windows_per_segment: max lenght of segment for mfcc computation,
                                     in number of windows
 
@@ -58,10 +59,10 @@ def extract_audio_features(audio, window_length=25, window_step=10,
     """
     def build_mfcc(segment):
         signal = get_numpy_array_of_samples(segment)
-        return python_speech_features.mfcc(
-            signal, segment.frame_rate,
-            winlen=window_length / 1000.0, winstep=window_step / 1000.0,
-            appendEnergy=False)[:, 1:13]
+        return python_speech_features.mfcc(signal, segment.frame_rate,
+                                           winlen=WINDOW_LENGTH / 1000.0,
+                                           winstep=WINDOW_STEP / 1000.0,
+                                           appendEnergy=False)[:, 1:13]
 
     # Build mfcc in slices to avoid out of memory issues
     # We need some margin before and after the slices,
@@ -71,8 +72,8 @@ def extract_audio_features(audio, window_length=25, window_step=10,
     msg = 'Segmentation size has to be greater than {}'.format(mfcc_margin)
     assert max_windows_per_segment > mfcc_margin, msg
 
-    audio_margin = mfcc_margin * window_step
-    audio_segmentation_size = max_windows_per_segment * window_step
+    audio_margin = mfcc_margin * WINDOW_STEP
+    audio_segmentation_size = max_windows_per_segment * WINDOW_STEP
 
     ranges = [(0 if start == 0 else start - audio_margin,  # splice start
                start + audio_segmentation_size + audio_margin,   # slice end
@@ -95,8 +96,8 @@ def extract_audio_features(audio, window_length=25, window_step=10,
     def gen_dBFS():
         "Generate the sequence of loudness measures (dBFS) of the windows"
         for index in range(len(mfcc)):
-            start = index * window_step
-            end = start + window_length
+            start = index * WINDOW_STEP
+            end = start + WINDOW_LENGTH
             yield audio[start:end].dBFS
 
     loudness = np.fromiter(gen_dBFS(), dtype=np.dtype(float), count=len(mfcc))
@@ -120,19 +121,23 @@ def louder_than(dbfs):
     return lambda mfcc, loudness: mfcc[loudness >= dbfs]
 
 
-def detect_max_silence_loudness():
-    # TODO
-    pass
+def detect_silence_level(audio, percentile=25, window_len=1000):
+    loudness = get_loudness(audio)
+    # each window has 10 ms => measure every 100 * 10 ms = 1 second silence
+    max_series = rolling_measure(loudness, np.max, window=100)
+    return np.percentile(max_series, percentile)
 
 
-def split_by_silence(audio, max_silence_loudness, min_silence_len=50):
+def split_by_silence(audio, max_silence_loudness, min_silence_len=500):
     '''Splits audio by silence segments
 
     based on the loudness feature array from windowed audio
 
     :param audio:
     :param max_silence_loudness: maximum loudness of silence windows
-    :param min_silence_len: minimum lenght of silence (in number of windows)
+    :param min_silence_len: minimum lenght of silence (in milliseconds)
+
+    :returns: intervals of splits, mesured in number of windows
     '''
     loudness = get_loudness(audio)
     intervals = intervals_where(loudness > max_silence_loudness)
@@ -160,7 +165,7 @@ def split_by_silence(audio, max_silence_loudness, min_silence_len=50):
 
         for (silence_start, silence_end), split in silences_and_splits:
             len_silence = silence_end - silence_start
-            if len_silence >= min_silence_len:
+            if len_silence >= min_silence_len / WINDOW_STEP:
                 # do split
                 yield prev
                 prev = split
