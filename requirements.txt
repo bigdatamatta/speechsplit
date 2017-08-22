@@ -1,8 +1,9 @@
+PyYAML
 functools32
 git+git://github.com/marciomazza/pydub.git@seek_step_for_detect_silence
 matplotlib
+mock
 numpy
 pytest
 python_speech_features
 sklearn
-mock
