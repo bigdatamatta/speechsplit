@@ -6,19 +6,19 @@ from silence import split_on_silence_keep_before
 
 @pytest.mark.parametrize('silence_ranges, split_ranges', [
 
-    ([(0, 100)], [(0, 100)]),  # whole segment is silence
-    ([], [(0, 100)]),          # whole segment is audible
+    ([(0, 100)], []),     # whole segment is silence
+    ([], [(0, 0, 100)]),  # whole segment is audible
 
-    # start: silence, end: silence
-    ([(0, 10), (20, 100)], [(0, 100)]),
-    ([(0, 10), (20, 30), (40, 100)], [(0, 20), (20, 100)]),
+    # start: silence, end: silence (last silence ignored)
+    ([(0, 10), (20, 100)], [(0, 10, 20)]),
+    ([(0, 10), (20, 30), (40, 100)], [(0, 10, 20), (20, 30, 40)]),
     # start: silence, end: audible
-    ([(0, 10)], [(0, 100)]),
-    ([(0, 10), (20, 30)], [(0, 20), (20, 100)]),
-    # start: audible, end: silence
-    ([(20, 100)], [(0, 100)]),
+    ([(0, 10)], [(0, 10, 100)]),
+    ([(0, 10), (20, 30)], [(0, 10, 20), (20, 30, 100)]),
+    # start: audible, end: silence (last silence ignored)
+    ([(20, 100)], [(0, 0, 20)]),
     # start: audible, end: audible
-    ([(10, 20)], [(0, 10), (10, 100)]),
+    ([(10, 20)], [(0, 0, 10), (10, 20, 100)]),
 ])
 def test_split_on_silence(silence_ranges, split_ranges):
 
