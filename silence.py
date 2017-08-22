@@ -4,7 +4,8 @@ from itertools import product
 from pydub.silence import detect_silence
 
 
-def split_on_silence_keep_before(audio_segment, min_silence_len=500, silence_thresh=-42):
+def split_on_silence_keep_before(audio_segment, min_silence_len=500,
+                                 silence_thresh=-42):
     '''Splits audios segments in chuncks separated by silence.
     Keep the silence in the begginning of each chunk, as possible,
     and attach silence at the end to the last chunk.'''
@@ -32,7 +33,8 @@ SILENCE_LEVELS = list(product(range(-42, -33), range(500, 200, -100)))
 
 def seek_split(audio):
     for min_silence_len, silence_thresh in SILENCE_LEVELS:
-        split = split_on_silence_keep_before(
-            audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh)
+        split = split_on_silence_keep_before(audio,
+                                             min_silence_len=min_silence_len,
+                                             silence_thresh=silence_thresh)
         if len(split) > 1:
             return split, min_silence_len, silence_thresh

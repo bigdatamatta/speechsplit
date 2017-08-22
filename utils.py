@@ -22,21 +22,23 @@ def intervals_where(mask):
 
 def timerepr(millis):
     '''based on
-    https://www.darklaunch.com/2009/10/06/python-time-duration-human-friendly-timestamp'''
+    https://www.darklaunch.com/2009/10/06/python-time-duration-human-friendly-timestamp'''  # noqa
 
     seconds, millis = divmod(millis, 1000)
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
     if hours:
-        return '{:02d}:{:02d}:{:02d}.{:03d}'.format(hours, minutes, seconds, millis)
+        return '{:02d}:{:02d}:{:02d}.{:03d}'.format(
+            hours, minutes, seconds, millis)
     else:
         return '{:02d}:{:02d}.{:03d}'.format(minutes, seconds, millis)
 
 
 # monkey patch AudioSegment __repr__ for convenience
 def audio_segment_repr_patch(self):
-    return 'Audio (length: {}, dB: {:.2f})'.format(timerepr(len(self)), self.dBFS)
+    return 'Audio (length: {}, dB: {:.2f})'.format(timerepr(len(self)),
+                                                   self.dBFS)
 
 
 AudioSegment.__repr__ = audio_segment_repr_patch

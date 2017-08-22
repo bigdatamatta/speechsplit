@@ -172,4 +172,5 @@ def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
 def predict(clf, audio, filter):
     mfcc = filter(*extract_audio_features(audio))
     pred = clf.predict(mfcc)
-    return [100 * np.count_nonzero(pred == k) / float(len(pred)) for k in (0, 1)]
+    return [100 * np.count_nonzero(pred == k) / float(len(pred))
+            for k in (0, 1)]
