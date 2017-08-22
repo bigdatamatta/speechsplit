@@ -1,16 +1,7 @@
 import pytest
+from mock import MagicMock, patch
 
-import silence
 from silence import split_on_silence_keep_before
-
-
-class AudioSegmentStub(object):
-
-    def __init__(self, length):
-        self.length = length
-
-    def __len__(self):
-        return self.length
 
 
 @pytest.mark.parametrize('silence_ranges, audio_length, split_ranges', [
@@ -29,13 +20,13 @@ class AudioSegmentStub(object):
     # start: audible, end: audible
     ([(10, 20)], 100, [(0, 10), (10, 100)]),
 ])
-def test_split_on_silence(monkeypatch, silence_ranges, audio_length, split_ranges):
+def test_split_on_silence(silence_ranges, audio_length, split_ranges):
 
-    audio_stub = AudioSegmentStub(audio_length)
+    audio_stub = MagicMock()
+    audio_stub.__len__.return_value = audio_length
 
-    def mock_detect_silence(audio_segment, min_silence_len, silence_thresh):
-        assert audio_segment == audio_stub
-        return silence_ranges
+    with patch('silence.detect_silence',
+               return_value=silence_ranges) as mock_detect_silence:
 
-    monkeypatch.setattr(silence, 'detect_silence', mock_detect_silence)
-    assert split_on_silence_keep_before(audio_stub) == split_ranges
+        assert split_on_silence_keep_before(audio_stub, 999, -99) == split_ranges
+        mock_detect_silence.assert_called_once_with(audio_stub, 999, -99)

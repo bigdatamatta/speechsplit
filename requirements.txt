@@ -5,3 +5,4 @@ numpy
 pytest
 python_speech_features
 sklearn
+mock
