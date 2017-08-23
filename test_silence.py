@@ -1,7 +1,7 @@
 import pytest
 from mock import MagicMock, patch
 
-from silence import SILENCE_LEVELS, detect_silence_and_audible
+from silence import detect_silence_and_audible
 
 
 @pytest.mark.parametrize('silence_ranges, split_ranges', [
@@ -28,10 +28,7 @@ def test_detect_silence_and_audible(silence_ranges, split_ranges):
     with patch('silence.detect_silence',
                return_value=silence_ranges) as mock_detect_silence:
 
-        level = 0
-        silence_thresh, min_silence_len = SILENCE_LEVELS[level]
-
         assert split_ranges == [
-            d[:3] for d in detect_silence_and_audible(audio_stub, level)]
-        mock_detect_silence.assert_called_once_with(
-            audio_stub, min_silence_len, silence_thresh)
+            d[:3] for d in detect_silence_and_audible(audio_stub, 0)]
+        mock_detect_silence.assert_called_once()
+        assert (audio_stub,) == mock_detect_silence.call_args[0]

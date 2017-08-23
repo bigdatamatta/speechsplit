@@ -3,4 +3,4 @@ Untitled*.ipynb
 *-Copy*.ipynb
 data
 .cache
-*.final.fragments.yaml
+*.fragments.yaml

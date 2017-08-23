@@ -2,12 +2,13 @@
 import itertools
 import os
 from hashlib import sha1
-from itertools import product
 
 import yaml
 from pydub.silence import detect_silence
 
-SILENCE_LEVELS = list(product(range(-42, -33), range(500, 200, -100)))
+SILENCE_LEVELS = [{'silence_thresh': t, 'min_silence_len': l}
+                  for t in range(-42, -33)
+                  for l in range(500, 100, -100)]
 
 
 def detect_silence_and_audible(audio_segment, level=0):
@@ -15,10 +16,8 @@ def detect_silence_and_audible(audio_segment, level=0):
     Keep the silence in the beginning of each chunk, as possible,
     and ignore silence after the last chunk.'''
 
-    silence_thresh, min_silence_len = SILENCE_LEVELS[level]
-
-    silent_ranges = detect_silence(audio_segment,
-                                   min_silence_len, silence_thresh)
+    silent_ranges = detect_silence(audio_segment, seek_step=10,
+                                   **SILENCE_LEVELS[level])
     len_seg = len(audio_segment)
 
     # make sure there is a silence at the beginning (even an empty one)
@@ -46,16 +45,20 @@ def get_audio_id(audio):
     return sha1(audio[:1000].get_array_of_samples()).hexdigest()[:10]
 
 
-def save_fragments(audio_id, iteration, chunks):
-    filename = '{}.{}.fragments.yaml'.format(audio_id, iteration)
+def get_audio_fragments_filename(audio, iteration='final'):
+    audio_id = get_audio_id(audio)
+    return '{}.{}.fragments.yaml'.format(audio_id, iteration)
+
+
+def save_fragments(audio, iteration, chunks):
+    filename = get_audio_fragments_filename(audio, iteration)
     with open(filename, 'w') as fragments_file:
         yaml.dump(chunks, fragments_file)
     return filename
 
 
-def fragment(audio, max_audible_allowed_size=10000):
+def fragment(audio, max_audible_allowed_size=5000):
     chunks = [[0, 0, len(audio), -1]]
-    audio_id = get_audio_id(audio)
     for iteration in itertools.count():
         for pos, (silence_start, start, end, level) in enumerate(chunks):
             if (end - start > max_audible_allowed_size and
@@ -74,7 +77,7 @@ def fragment(audio, max_audible_allowed_size=10000):
         else:
             # there's nothing more to split
             break
-        last_filename = save_fragments(audio_id, iteration, chunks)
-    os.remove(last_filename)
-    save_fragments(audio_id, 'final', chunks)
+        last_filename = save_fragments(audio, iteration, chunks)
+    # save with final name
+    os.rename(last_filename, get_audio_fragments_filename(audio))
     return chunks
