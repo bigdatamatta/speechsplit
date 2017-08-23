@@ -119,19 +119,11 @@ def get_loudness(audio):
     return extract_audio_features(audio)[1]
 
 
-def loudness_filter(min=-float('inf'), max=float('inf')):
-    return lambda mfcc, loudness: mfcc[(loudness >= min) & (loudness < max)]
-
-
-def louder_than(dbfs):
-    return lambda mfcc, loudness: mfcc[loudness >= dbfs]
-
-
 # CLASSIFICATION ############################################################
 
 SPEAKER, TRANSLATOR, BOTH = 'speaker', 'translator', 'both'
 VOICES = [SPEAKER, TRANSLATOR]
-LABEL_OPTIONS = [BOTH, SPEAKER, TRANSLATOR]
+LABEL_OPTIONS = [BOTH] + VOICES
 CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
@@ -159,7 +151,18 @@ def pre_label(audio, min_duration=5000):
     return labeled_samples
 
 
-def build_training_data(labeled_audios, filter):
+def loudness_between(min=-float('inf'), max=float('inf')):
+    return lambda mfcc, loudness: mfcc[(loudness >= min) & (loudness < max)]
+
+
+def louder_than(dbfs):
+    return lambda mfcc, loudness: mfcc[loudness >= dbfs]
+
+
+DEFAULT_FILTER = louder_than(-33)
+
+
+def build_training_data(labeled_audios, filter=DEFAULT_FILTER):
 
     label_to_mfcc = [
         (label, filter(*extract_audio_features(labeled_audios[label])))
@@ -186,7 +189,7 @@ def train_and_score(clf, X_all, y_all):
 
 
 GRID_SEARCH_PARAMETERS = [
-    {'C': [1, 10, 100], 'kernel': ['linear']},
+    # {'C': [1, 10, 100], 'kernel': ['linear']},
     {'C': [1, 10, 100], 'kernel': ['rbf'], 'gamma': [0.01, 0.001, 0.0001]},
 ]
 
@@ -201,8 +204,21 @@ def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
     return grid.best_estimator_
 
 
-def predict(clf, audio, filter):
+def predict(clf, audio, filter=DEFAULT_FILTER):
     mfcc = filter(*extract_audio_features(audio))
-    pred = clf.predict(mfcc)
-    return [100 * np.count_nonzero(pred == k) / float(len(pred))
-            for k in (0, 1)]
+    prediction = clf.predict(mfcc)
+    len_pred = float(len(prediction))
+    return {voice: np.count_nonzero(prediction == CLASSES[voice]) / len_pred
+            for voice in VOICES}
+
+
+def predict_fragments(clf, audio, filter=DEFAULT_FILTER):
+    fragment_list = do_fragment(audio)
+
+    for fragment in fragment_list:
+        silence_start, start, end, level, label = fragment
+        if label not in LABEL_OPTIONS:
+            # perdict and update fragments
+            fragment[-1] = predict(clf, audio[start:end], filter)
+
+    return fragment_list
