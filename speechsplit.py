@@ -132,8 +132,7 @@ def louder_than(dbfs):
 SPEAKER, TRANSLATOR, BOTH = 'speaker', 'translator', 'both'
 VOICES = [SPEAKER, TRANSLATOR]
 LABEL_OPTIONS = [BOTH, SPEAKER, TRANSLATOR]
-
-SPEAKER_CLASS, TRANSLATOR_CLASS = 1, 2
+CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
 def pre_label(audio, min_duration=5000):
@@ -160,15 +159,15 @@ def pre_label(audio, min_duration=5000):
     return labeled_samples
 
 
-def build_training_data(speaker_features, translator_features, filter):
+def build_training_data(labeled_audios, filter):
 
-    speaker_mfcc, translator_mfcc = [filter(*speaker_features),
-                                     filter(*translator_features)]
-    X_all = np.concatenate((speaker_mfcc, translator_mfcc))
-    y_all = np.concatenate([np.repeat(y, len(mfcc)) for y, mfcc in [
-        (SPEAKER_CLASS, speaker_mfcc),
-        (TRANSLATOR_CLASS, translator_mfcc)]])
+    label_to_mfcc = [
+        (label, filter(*extract_audio_features(labeled_audios[label])))
+        for label in VOICES]
 
+    X_all = np.concatenate([mfcc for label, mfcc in label_to_mfcc])
+    y_all = np.concatenate([np.repeat(CLASSES[label], len(mfcc))
+                            for label, mfcc in label_to_mfcc])
     return X_all, y_all
 
 

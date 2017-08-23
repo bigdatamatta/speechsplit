@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
+from mock import patch
 from pydub.generators import Sine
 
-from speechsplit import (SPEAKER_CLASS, TRANSLATOR_CLASS, build_training_data,
+from speechsplit import (CLASSES, SPEAKER, TRANSLATOR, build_training_data,
                          extract_audio_features, smooth_bumps)
 
 
@@ -53,10 +54,6 @@ def test_smooth_bumps(data, output):
     assert ''.join(data) == output
 
 
-SPE, TRA = SPEAKER_CLASS, TRANSLATOR_CLASS
-___, BIG = False, True
-
-
 AUDIO_STUB = Sine(440).to_audio_segment(10100)
 
 
@@ -79,6 +76,10 @@ def test_split_too_small_in_extract_audio_features():
     extract_audio_features(AUDIO_STUB, max_windows_per_segment=10)
 
 
+SPE, TRA = [CLASSES[v] for v in SPEAKER, TRANSLATOR]
+___, BIG = False, True
+
+
 @pytest.mark.parametrize(
     'speaker_features, translator_features, X_all, y_all', [[
         (
@@ -98,8 +99,15 @@ def test_build_training_data(
     speaker_features, translator_features, X_all, y_all = map(
         np.array, (speaker_features, translator_features, X_all, y_all))
 
-    X, y = build_training_data(
-        speaker_features, translator_features,
-        lambda mfcc, loudness: mfcc[loudness.astype(bool)])
-    assert all(X_all == X)
-    assert all(y_all == y)
+    # mock extract_audio_features as the identity function...
+    with patch('speechsplit.extract_audio_features', side_effect=lambda x: x):
+
+        # ... and simply make the audio stubs directly equal to their features
+        labeled_audios = {SPEAKER: speaker_features,
+                          TRANSLATOR: translator_features}
+
+        X, y = build_training_data(
+            labeled_audios,
+            lambda mfcc, loudness: mfcc[loudness.astype(bool)])
+        assert all(X_all == X)
+        assert all(y_all == y)
