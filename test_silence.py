@@ -2,7 +2,7 @@ import pytest
 from mock import MagicMock, patch
 from pydub.generators import Sine
 
-from silence import detect_silence_and_audible, do_fragment
+from silence import detect_silence_and_audible, get_fragments
 
 
 @pytest.mark.parametrize('silence_ranges, split_ranges', [
@@ -38,16 +38,15 @@ def test_detect_silence_and_audible(silence_ranges, split_ranges):
 HI = Sine(440).to_audio_segment(1000)
 LO = HI.apply_gain(-50)
 
-do_fragment = do_fragment.__wrapped__  # remove lru cache for testing
+get_fragments = get_fragments.__wrapped__  # remove lru cache for testing
 
 
-def test_fragment():
+def test_get_fragments():
     audio = LO + HI * 2 + LO[:400] + HI * 2 + LO + HI * 10
-    # simply turn off yaml saving and os.remove
-    with patch('silence.save_fragments'):
-        with patch('os.remove'):
-            assert [[0, 1000, 5400, 0, '?'],
-                    [5400, 6400, 16400, 0, '?']] == do_fragment(audio, 5000)
-            assert [[0, 1000, 3000, 1, '?'],
-                    [3000, 3400, 5400, 1, '?'],
-                    [5400, 6400, 16400, 0, '?']] == do_fragment(audio, 3000)
+    assert [[0, 1000, 5400, 0, '?'],
+            [5400, 6400, 16400, 0, '?']] == get_fragments(
+                audio, target_audible_size=5000)
+    assert [[0, 1000, 3000, 1, '?'],
+            [3000, 3400, 5400, 1, '?'],
+            [5400, 6400, 16400, 0, '?']] == get_fragments(
+                audio, target_audible_size=3000)

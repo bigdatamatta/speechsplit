@@ -12,7 +12,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from silence import do_fragment
+from silence import get_fragments
 from utils import intervals_where
 
 # DATA TREATMENT  #######################################################
@@ -130,7 +130,7 @@ CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 def pre_label(audio, min_duration=5000):
     question = Menu(LABEL_OPTIONS,
                     title="Who's speaking in the audio you just heard?")
-    fragment_list = do_fragment(audio)
+    fragment_list = get_fragments(audio)
     labeled_samples = defaultdict(lambda: AudioSegment.silent(0))
 
     for fragment in fragment_list:
@@ -213,7 +213,7 @@ def predict(clf, audio, filter=DEFAULT_FILTER):
 
 
 def predict_fragments(clf, audio, filter=DEFAULT_FILTER):
-    fragment_list = do_fragment(audio)
+    fragment_list = get_fragments(audio)
 
     for fragment in fragment_list:
         silence_start, start, end, level, label = fragment

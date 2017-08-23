@@ -1,11 +1,11 @@
 
 import itertools
-import os
 from hashlib import sha1
 
 import yaml
 from functools32 import lru_cache
 from pydub.silence import detect_silence
+from unstdlib import listify
 
 SILENCE_LEVELS = [{'silence_thresh': t, 'min_silence_len': l}
                   for t in range(-42, -33)
@@ -60,12 +60,13 @@ def save_fragments(audio, chunks, iteration='final'):
 
 
 @lru_cache()
-def do_fragment(audio, max_audible_allowed_size=5000):
+@listify
+def get_fragments(audio, min_audible_size=150, target_audible_size=2000):
     chunks = [d + [NO_LABEL] for d in detect_silence_and_audible(audio)]
     for iteration in itertools.count(1):
         for pos, (silence_start, start, end, level, label
                   ) in enumerate(chunks):
-            if (end - start > max_audible_allowed_size and
+            if (end - start > target_audible_size and
                     level + 1 < len(SILENCE_LEVELS)):
                 subsplit = seek_split(audio[start:end], level + 1)
                 if len(subsplit) > 1:
@@ -79,12 +80,19 @@ def do_fragment(audio, max_audible_allowed_size=5000):
                     if pos + 1 < len(chunks):
                         chunks[pos + 1][0] = subsplit[-1][2]
                     chunks[pos:pos + 1] = subsplit
-                    last_saved = save_fragments(audio, chunks, iteration)
                     break
         else:
             # there's nothing more to split
-            if iteration > 1:
-                os.remove(last_saved)
-            save_fragments(audio, chunks)
             break
-    return chunks
+
+    # join each almost silent chunk as a silence beginning the following one
+    almost_silence_start = None
+    for silence_start, start, end, level, label in chunks:
+        if end - start < min_audible_size:
+            # remember for following silence start
+            # note that more than one "almost silence" can accumulate
+            almost_silence_start = almost_silence_start or silence_start
+        else:
+            yield [almost_silence_start or silence_start,
+                   start, end, level, label]
+            almost_silence_start = None  # reset
