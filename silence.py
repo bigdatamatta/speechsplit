@@ -4,11 +4,13 @@ import os
 from hashlib import sha1
 
 import yaml
+from functools32 import lru_cache
 from pydub.silence import detect_silence
 
 SILENCE_LEVELS = [{'silence_thresh': t, 'min_silence_len': l}
                   for t in range(-42, -33)
                   for l in range(500, 100, -100)]
+NO_LABEL = '?'
 
 
 def detect_silence_and_audible(audio_segment, level=0):
@@ -50,34 +52,39 @@ def get_audio_fragments_filename(audio, iteration='final'):
     return '{}.{}.fragments.yaml'.format(audio_id, iteration)
 
 
-def save_fragments(audio, iteration, chunks):
+def save_fragments(audio, chunks, iteration='final'):
     filename = get_audio_fragments_filename(audio, iteration)
     with open(filename, 'w') as fragments_file:
         yaml.dump(chunks, fragments_file)
     return filename
 
 
-def fragment(audio, max_audible_allowed_size=5000):
-    chunks = [[0, 0, len(audio), -1]]
-    for iteration in itertools.count():
-        for pos, (silence_start, start, end, level) in enumerate(chunks):
+@lru_cache()
+def do_fragment(audio, max_audible_allowed_size=5000):
+    chunks = [d + [NO_LABEL] for d in detect_silence_and_audible(audio)]
+    for iteration in itertools.count(1):
+        for pos, (silence_start, start, end, level, label
+                  ) in enumerate(chunks):
             if (end - start > max_audible_allowed_size and
                     level + 1 < len(SILENCE_LEVELS)):
                 subsplit = seek_split(audio[start:end], level + 1)
-                # shift all chunks by "start"
-                subsplit = [[s + start, i + start, e + start, l]
-                            for s, i, e, l in subsplit]
-                # attach previous silence to first chunk of subsplit
-                subsplit[0][0] = silence_start
-                # last end must be the silence start of next global chunk
-                if pos + 1 < len(chunks):
-                    chunks[pos + 1][0] = subsplit[-1][2]
-                chunks[pos:pos + 1] = subsplit
-                break
+                if len(subsplit) > 1:
+                    # shift all chunks by "start" and add label placeholder
+                    # notice we erase the previous label after splitting
+                    subsplit = [[s + start, i + start, e + start, l, NO_LABEL]
+                                for s, i, e, l in subsplit]
+                    # attach previous silence to first chunk of subsplit
+                    subsplit[0][0] = silence_start
+                    # last end must be the silence start of next global chunk
+                    if pos + 1 < len(chunks):
+                        chunks[pos + 1][0] = subsplit[-1][2]
+                    chunks[pos:pos + 1] = subsplit
+                    last_saved = save_fragments(audio, chunks, iteration)
+                    break
         else:
             # there's nothing more to split
+            if iteration > 1:
+                os.remove(last_saved)
+            save_fragments(audio, chunks)
             break
-        last_filename = save_fragments(audio, iteration, chunks)
-    # save with final name
-    os.rename(last_filename, get_audio_fragments_filename(audio))
     return chunks
