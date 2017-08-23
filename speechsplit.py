@@ -1,12 +1,18 @@
 
+from collections import defaultdict
+
 import numpy as np
 import python_speech_features
+from choice import Menu
 from functools32 import lru_cache
+from pydub import AudioSegment
+from pydub.playback import play
 from sklearn.cross_validation import train_test_split
 from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
+from silence import do_fragment
 from utils import intervals_where
 
 # DATA TREATMENT  #######################################################
@@ -123,8 +129,35 @@ def louder_than(dbfs):
 
 # CLASSIFICATION ############################################################
 
+SPEAKER, TRANSLATOR, BOTH = 'speaker', 'translator', 'both'
+VOICES = [SPEAKER, TRANSLATOR]
+LABEL_OPTIONS = [BOTH, SPEAKER, TRANSLATOR]
 
 SPEAKER_CLASS, TRANSLATOR_CLASS = 1, 2
+
+
+def pre_label(audio, min_duration=5000):
+    question = Menu(LABEL_OPTIONS,
+                    title="Who's speaking in the audio you just heard?")
+    fragment_list = do_fragment(audio)
+    labeled_samples = defaultdict(lambda: AudioSegment.silent(0))
+
+    for fragment in fragment_list:
+        silence_start, start, end, level, label = fragment
+        if label not in LABEL_OPTIONS:
+            play(audio[start:end])
+            label = question.ask()
+            fragment[-1] = label            # update fragments
+
+        # accumulate segment on proper sample
+        if label in VOICES:
+            labeled_samples[label] += audio[start:end]
+
+        # terminate if we have enough labeled data
+        if min(len(a) for a in labeled_samples.values()) >= min_duration:
+            break
+
+    return labeled_samples
 
 
 def build_training_data(speaker_features, translator_features, filter):
