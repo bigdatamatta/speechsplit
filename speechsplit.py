@@ -207,9 +207,10 @@ def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
 def predict(clf, audio, filter=DEFAULT_FILTER):
     mfcc = filter(*extract_audio_features(audio))
     prediction = clf.predict(mfcc)
-    len_pred = float(len(prediction))
-    return {voice: np.count_nonzero(prediction == CLASSES[voice]) / len_pred
-            for voice in VOICES}
+    count_voice, voice = max(
+        (np.count_nonzero(prediction == CLASSES[voice]), voice)
+        for voice in VOICES)
+    return (voice, count_voice / float(len(prediction)))
 
 
 def predict_fragments(clf, audio, filter=DEFAULT_FILTER):
@@ -224,18 +225,16 @@ def predict_fragments(clf, audio, filter=DEFAULT_FILTER):
     return fragment_list
 
 
-def best_classification(proportion_dict):
-    proportion, label = max((value, label)
-                            for label, value in proportion_dict.items())
-    return label, proportion
-
-
 def collect_most_certain(fragments, min_proportion):
     collected = defaultdict(list)
     for chunk in fragments:
-        proportion_dict = chunk[-1]  # label
-        if isinstance(proportion_dict, dict):
-            label, proportion = best_classification(proportion_dict)
+        label = chunk[-1]  # label
+        if isinstance(label, (tuple, list)):
+            voice, proportion = label
             if proportion >= min_proportion:
-                collected[label].append(chunk)
+                collected[voice].append(chunk)
     return collected
+
+
+def to_segments(audio, fragments):
+    return [audio[i:e] for s, i, e, lv, lb in fragments]
