@@ -1,5 +1,6 @@
 
 import itertools
+import os
 from hashlib import sha1
 
 import yaml
@@ -47,21 +48,53 @@ def get_audio_id(audio):
     return sha1(audio[:1000].get_array_of_samples()).hexdigest()[:10]
 
 
-def get_audio_fragments_filename(audio, iteration='final'):
+CACHE_DIR = '.cache'
+
+
+def get_audio_fragments_filename(audio):
     audio_id = get_audio_id(audio)
-    return '{}.{}.fragments.yaml'.format(audio_id, iteration)
+    return '{}/{}.fragments.yaml'.format(CACHE_DIR, audio_id)
 
 
-def save_fragments(audio, chunks, iteration='final'):
-    filename = get_audio_fragments_filename(audio, iteration)
+def save_fragments(audio, chunks):
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
+    filename = get_audio_fragments_filename(audio)
     with open(filename, 'w') as fragments_file:
         yaml.dump(chunks, fragments_file)
-    return filename
+
+
+def load_fragments(audio):
+    filename = get_audio_fragments_filename(audio)
+    if os.path.exists(filename):
+        with open(filename, 'r') as fragments_file:
+            return yaml.load(fragments_file)
+
+
+def _gen_join_almost_silent(chunks, min_audible_size):
+    'join each almost silent chunk as a silence beginning the following one'
+
+    almost_silence_start = None
+    for silence_start, start, end, level, label in chunks:
+        if end - start < min_audible_size:
+            # remember for following silence start
+            # note that more than one "almost silence" can accumulate
+            almost_silence_start = almost_silence_start or silence_start
+        else:
+            yield [almost_silence_start or silence_start,
+                   start, end, level, label]
+            almost_silence_start = None  # reset
 
 
 @lru_cache()
 @listify
 def get_fragments(audio, min_audible_size=150, target_audible_size=2000):
+
+    # try to load from disk
+    loaded = load_fragments(audio)
+    if loaded:
+        return loaded
+
     chunks = [d + [NO_LABEL] for d in detect_silence_and_audible(audio)]
     for iteration in itertools.count(1):
         for pos, (silence_start, start, end, level, label
@@ -85,14 +118,6 @@ def get_fragments(audio, min_audible_size=150, target_audible_size=2000):
             # there's nothing more to split
             break
 
-    # join each almost silent chunk as a silence beginning the following one
-    almost_silence_start = None
-    for silence_start, start, end, level, label in chunks:
-        if end - start < min_audible_size:
-            # remember for following silence start
-            # note that more than one "almost silence" can accumulate
-            almost_silence_start = almost_silence_start or silence_start
-        else:
-            yield [almost_silence_start or silence_start,
-                   start, end, level, label]
-            almost_silence_start = None  # reset
+    chunks = list(_gen_join_almost_silent(chunks, min_audible_size))
+    save_fragments(audio, chunks)
+    return chunks

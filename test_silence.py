@@ -43,10 +43,12 @@ get_fragments = get_fragments.__wrapped__  # remove lru cache for testing
 
 def test_get_fragments():
     audio = LO + HI * 2 + LO[:400] + HI * 2 + LO + HI * 10
-    assert [[0, 1000, 5400, 0, '?'],
-            [5400, 6400, 16400, 0, '?']] == get_fragments(
-                audio, target_audible_size=5000)
-    assert [[0, 1000, 3000, 1, '?'],
-            [3000, 3400, 5400, 1, '?'],
-            [5400, 6400, 16400, 0, '?']] == get_fragments(
-                audio, target_audible_size=3000)
+
+    with patch('silence.save_fragments'):  # simply turn off saving
+        assert [[0, 1000, 5400, 0, '?'],
+                [5400, 6400, 16400, 0, '?']] == get_fragments(
+                    audio, target_audible_size=5000)
+        assert [[0, 1000, 3000, 1, '?'],
+                [3000, 3400, 5400, 1, '?'],
+                [5400, 6400, 16400, 0, '?']] == get_fragments(
+                    audio, target_audible_size=3000)
