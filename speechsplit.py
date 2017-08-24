@@ -222,3 +222,20 @@ def predict_fragments(clf, audio, filter=DEFAULT_FILTER):
             fragment[-1] = predict(clf, audio[start:end], filter)
 
     return fragment_list
+
+
+def best_classification(proportion_dict):
+    proportion, label = max((value, label)
+                            for label, value in proportion_dict.items())
+    return label, proportion
+
+
+def collect_most_certain(fragments, min_proportion):
+    collected = defaultdict(list)
+    for chunk in fragments:
+        proportion_dict = chunk[-1]  # label
+        if isinstance(proportion_dict, dict):
+            label, proportion = best_classification(proportion_dict)
+            if proportion >= min_proportion:
+                collected[label].append(chunk)
+    return collected
