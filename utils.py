@@ -42,8 +42,3 @@ def audio_segment_repr_patch(self):
 
 
 AudioSegment.__repr__ = audio_segment_repr_patch
-
-
-def rolling_measure(data, measure, window=10, step=1):
-    return np.array([measure(data[i:i + window])
-                     for i in range(0, len(data) - window, step)])
