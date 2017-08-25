@@ -2,7 +2,8 @@ import pytest
 from mock import MagicMock, patch
 from pydub.generators import Sine
 
-from silence import Chunk, detect_silence_and_audible, get_chunks
+from silence import (Chunk, detect_silence_and_audible, get_chunks,
+                     load_chunks, save_chunks)
 
 
 @pytest.mark.parametrize('silence_ranges, split_ranges', [
@@ -53,3 +54,12 @@ def test_get_chunks():
                 Chunk(3000, 3400, 5400, 1),
                 Chunk(5400, 6400, 16400, 0)] == get_chunks(
                     audio, target_audible_len=3000)
+
+
+def test_save_and_load_fragments(tmpdir):
+    audio = HI
+    chunks = [Chunk(0, 1, 2, 3),
+              Chunk(5, 6, 7, 8, 'TRUTH', ['speaker', .9])]
+    with patch('silence.CACHE_DIR', str(tmpdir)):
+        save_chunks(audio, chunks)
+        assert chunks == load_chunks(audio)
