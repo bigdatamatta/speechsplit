@@ -1,5 +1,7 @@
 
+import subprocess
 from itertools import groupby
+from tempfile import NamedTemporaryFile
 
 import numpy as np
 from pydub import AudioSegment
@@ -42,3 +44,9 @@ def audio_segment_repr_patch(self):
 
 
 AudioSegment.__repr__ = audio_segment_repr_patch
+
+
+def play(audio, speed=2):
+    with NamedTemporaryFile("w+b", suffix=".wav") as f:
+        audio.export(f.name, "wav")
+        subprocess.call(["mpv", "--speed", str(speed), f.name])

@@ -6,14 +6,13 @@ import python_speech_features
 from choice import Menu
 from functools32 import lru_cache
 from pydub import AudioSegment
-from pydub.playback import play
 from sklearn.cross_validation import train_test_split
 from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
 from silence import get_fragments
-from utils import intervals_where
+from utils import intervals_where, play
 
 # DATA TREATMENT  #######################################################
 
