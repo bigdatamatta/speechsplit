@@ -1,4 +1,5 @@
 PyYAML
+bunch
 functools32
 git+git://github.com/marciomazza/choice.git@fix-invalid-choice-not-int
 git+git://github.com/marciomazza/pydub.git@seek_step_for_detect_silence
@@ -8,4 +9,3 @@ numpy
 pytest
 python_speech_features
 sklearn
-unstdlib

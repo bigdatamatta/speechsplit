@@ -11,7 +11,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from silence import get_fragments
+from silence import get_chunks
 from utils import intervals_where, play
 
 # DATA TREATMENT  #######################################################
@@ -122,32 +122,29 @@ def get_loudness(audio):
 
 SPEAKER, TRANSLATOR, BOTH = 'speaker', 'translator', 'both'
 VOICES = [SPEAKER, TRANSLATOR]
-LABEL_OPTIONS = [BOTH] + VOICES
+TRUTH_OPTIONS = [BOTH] + VOICES
 CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
 def pre_label(audio, min_duration=5000):
-    question = Menu(LABEL_OPTIONS,
+    question = Menu(TRUTH_OPTIONS,
                     title="Who's speaking in the audio you just heard?")
-    fragment_list = get_fragments(audio)
-    labeled_samples = defaultdict(lambda: AudioSegment.silent(0))
+    accumulated_samples = defaultdict(lambda: AudioSegment.silent(0))
 
-    for fragment in fragment_list:
-        silence_start, start, end, level, label = fragment
-        if label not in LABEL_OPTIONS:
-            play(audio[start:end])
-            label = question.ask()
-            fragment[-1] = label            # update fragments
+    for chunk in get_chunks(audio):
+        if chunk.truth not in TRUTH_OPTIONS:
+            play(chunk.cut(audio))
+            chunk.truth = question.ask()
 
         # accumulate segment on proper sample
-        if label in VOICES:
-            labeled_samples[label] += audio[start:end]
+        if chunk.truth in VOICES:
+            accumulated_samples[chunk.truth] += chunk.cut(audio)
 
         # terminate if we have enough labeled data
-        if min(len(a) for a in labeled_samples.values()) >= min_duration:
+        if all(len(a) >= min_duration for a in accumulated_samples.values()):
             break
 
-    return labeled_samples
+    return accumulated_samples
 
 
 def loudness_between(min=-float('inf'), max=float('inf')):
@@ -212,28 +209,23 @@ def predict(clf, audio, filter=DEFAULT_FILTER):
     return (voice, count_voice / float(len(prediction)))
 
 
-def predict_fragments(clf, audio, filter=DEFAULT_FILTER):
-    fragment_list = get_fragments(audio)
-
-    for fragment in fragment_list:
-        silence_start, start, end, level, label = fragment
-        if label not in LABEL_OPTIONS:
-            # perdict and update fragments
-            fragment[-1] = predict(clf, audio[start:end], filter)
-
-    return fragment_list
+def predict_chunks(clf, audio, filter=DEFAULT_FILTER):
+    chunks = get_chunks(audio)
+    for chunk in chunks:
+        if chunk.truth not in TRUTH_OPTIONS:
+            chunk.label = predict(clf, chunk.cut(audio), filter)
+    return chunks
 
 
-def collect_most_certain(fragments, min_proportion):
+def collect_most_certain(chunks, min_proportion):
     collected = defaultdict(list)
-    for chunk in fragments:
-        label = chunk[-1]  # label
-        if isinstance(label, (tuple, list)):
-            voice, proportion = label
+    for chunk in chunks:
+        if chunk.label:
+            voice, proportion = chunk.label
             if proportion >= min_proportion:
                 collected[voice].append(chunk)
     return collected
 
 
-def to_segments(audio, fragments):
-    return [audio[i:e] for s, i, e, lv, lb in fragments]
+def to_segments(audio, chunks):
+    return [chunk.cut(audio) for chunk in chunks]
