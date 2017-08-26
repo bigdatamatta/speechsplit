@@ -264,43 +264,60 @@ def refit_and_predict_chunks(clf, audio):
     ))
 
 
-def confirm_truth(clf, audio, voice, limit=10, speed=1):
+def spawn_refit_and_predict(clf, audio):
+    # spawn a refit e re-predict thread if not already running
+    refit_is_running = [t for t in threading.enumerate()
+                        if t.name == 'refit_and_predict']
+    if not refit_is_running:
+        refit_thread = threading.Thread(
+            name='refit_and_predict',
+            target=refit_and_predict_chunks, args=(clf, audio))
+        refit_thread.setDaemon(True)
+        refit_thread.start()
+
+
+def confirm_truth(clf, audio, voice, group=10, limit=10, speed=1):
     chunks = get_chunks(audio)
-    print('Confirm as long as the audios are from {}'.format(
-        voice.upper()))
+    print('Confirm label classifications.')
     print('Type:')
     print('      * just ENTER to confirm'
           '      * "s" to skip the audio\n'
           '      * "a" to hear it again\n'
           '      * and anything else to stop.')
 
-    refit_thread = None
-    for count in range(limit):
+    while(limit):
+        limit = limit - 1  # we need to explicitly decrement to enable repeat
         unknown = [c for c in chunks
                    if not c.truth and c.label[0] == voice]
         best_first = sorted(unknown, key=lambda c: (c.label[1], c.audible_len),
-                            reverse=True)
+                            reverse=True)[:group]
         if not best_first:
             break
 
-        best = best_first[0]
-        print ('#' * 30, best.label)
-        play(best.cut(audio), speed)
+        for best in best_first:
+            print('#' * 30, best.label, chunks.index(best))
+        play(sum(best.cut(audio) for best in best_first), speed)
 
-        typed = raw_input()
+        typed = raw_input().strip().lower()
+        truth_option = {'s': SPEAKER, 't': TRANSLATOR, 'b': BOTH}.get(typed)
 
-        if not typed.strip():
-            best.truth = best.label[0]
-            # spawn a refit e re-predict thread if not already running
-            if not (refit_thread and refit_thread.is_alive()):
-                refit_thread = threading.Thread(
-                    name='refit_and_predict',
-                    target=refit_and_predict_chunks, args=(clf, audio))
-                refit_thread.start()
-        elif typed.strip().lower() == 's':  # skip
-            best.truth = 'SKIP'
+        if not typed:
+            # default to label as ground truth
+            for best in best_first:
+                best.truth = best.label[0]
+            spawn_refit_and_predict(clf, audio)
+        elif truth_option:
+            # set explicitly
+            for best in best_first:
+                best.truth = truth_option
+            spawn_refit_and_predict(clf, audio)
+        elif typed == 'a':
+            # play again
+            limit = limit + 1  # restore limit
             continue
-        elif typed.strip().lower() == 'a':  # again
+        elif typed == '/':
+            # start inspecting one by one
+            group = 1
             continue
         else:
             break
