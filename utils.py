@@ -46,7 +46,7 @@ def audio_segment_repr_patch(self):
 AudioSegment.__repr__ = audio_segment_repr_patch
 
 
-def play(audio, speed=2):
+def play(audio, speed=1):
     with NamedTemporaryFile("w+b", suffix=".wav") as f:
         audio.export(f.name, "wav")
         subprocess.call(["mpv", "--speed", str(speed), f.name])
