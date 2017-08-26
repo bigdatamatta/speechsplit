@@ -85,6 +85,10 @@ class Chunk(Bunch):
         self.label = label  # label obtained by the classifier
 
     @property
+    def len(self):
+        return self.end - self.silence_start
+
+    @property
     def audible_len(self):
         return self.end - self.start
 
@@ -132,6 +136,8 @@ def get_chunks(audio, min_audible_len=300, target_audible_len=2000,
                         sub.silence_start += chunk.start
                         sub.start += chunk.start
                         sub.end += chunk.start
+                        # keep ground truth after split
+                        sub.truth = chunk.truth
                     # attach previous silence to first chunk of subsplit
                     subsplit[0].silence_start = chunk.silence_start
                     # the end of the last sub chunk must

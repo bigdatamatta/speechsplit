@@ -43,17 +43,21 @@ LO = HI.apply_gain(-50)
 get_chunks = get_chunks.__wrapped__  # remove lru cache for testing
 
 
-def test_get_chunks():
+@pytest.mark.parametrize('chunks, target_audible_len', [
+    [[Chunk(0, 1000, 5400, 0),
+      Chunk(5400, 6400, 16400, 0)], 5000],
+    [[Chunk(0, 1000, 3000, 1),
+      Chunk(3000, 3400, 5400, 1),
+      Chunk(5400, 6400, 16400, 0)], 3000],
+])
+def test_get_chunks(chunks, target_audible_len):
     audio = LO + HI * 2 + LO[:400] + HI * 2 + LO + HI * 10
 
     with patch('silence.save_chunks'):  # simply turn off saving
-        assert [Chunk(0, 1000, 5400, 0),
-                Chunk(5400, 6400, 16400, 0)] == get_chunks(
-                    audio, target_audible_len=5000)
-        assert [Chunk(0, 1000, 3000, 1),
-                Chunk(3000, 3400, 5400, 1),
-                Chunk(5400, 6400, 16400, 0)] == get_chunks(
-                    audio, target_audible_len=3000)
+        assert chunks == get_chunks(audio,
+                                    target_audible_len=target_audible_len)
+        # the sum of chunks is equal to the original audio
+        assert audio == sum(audio[c.silence_start:c.end] for c in chunks)
 
 
 def test_save_and_load_fragments(tmpdir):
