@@ -1,4 +1,6 @@
 
+import threading
+import timeit
 from collections import defaultdict
 
 import numpy as np
@@ -12,7 +14,7 @@ from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
 from silence import get_chunks
-from utils import intervals_where, play
+from utils import intervals_where, play, timerepr
 
 # DATA TREATMENT  #######################################################
 
@@ -46,7 +48,7 @@ WINDOW_LENGTH = 25  # the length of the analysis window in milliseconds
 
 
 @lru_cache()
-def get_features(audio, max_windows_per_segment=100000):
+def get_features(audio, max_windows_per_segment=10 * 6000):  # 6000 -> 1 min
     """Compute audio features of pydub audio:
         Mel-filterbank energy features and loudness (in dBFS).
 
@@ -249,14 +251,31 @@ def refit(clf, audio):
     clf.fit(*build_training_data(labeled_audios))
 
 
-def confirm_truth(clf, audio, voice, limit=10):
+def refit_and_predict_chunks(clf, audio):
+    start_time = timeit.default_timer()
+    print('.......... refit and re-predict started ..........')
+
+    refit(clf, audio)
+    predict_chunks(clf, audio)
+
+    elapsed = timeit.default_timer() - start_time
+    print('---------- refit and re-predict DONE (in {}) ----------'.format(
+        timerepr(int(elapsed * 1000))
+    ))
+
+
+def confirm_truth(clf, audio, voice, limit=10, speed=1):
     chunks = get_chunks(audio)
-    print('Confirm pressing ENTER as long as the audios are from {}'.format(
+    print('Confirm as long as the audios are from {}'.format(
         voice.upper()))
-    print('Type anything else to stop.')
+    print('Type:')
+    print('      * just ENTER to confirm'
+          '      * "s" to skip the audio\n'
+          '      * "a" to hear it again\n'
+          '      * and anything else to stop.')
+
+    refit_thread = None
     for count in range(limit):
-        # refit(clf, audio)
-        # predict_chunks(clf, audio)
         unknown = [c for c in chunks
                    if not c.truth and c.label[0] == voice]
         best_first = sorted(unknown, key=lambda c: (c.label[1], c.audible_len),
@@ -266,9 +285,22 @@ def confirm_truth(clf, audio, voice, limit=10):
 
         best = best_first[0]
         print ('#' * 30, best.label)
-        play(best.cut(audio))
-        if not raw_input():
+        play(best.cut(audio), speed)
+
+        typed = raw_input()
+
+        if not typed.strip():
             best.truth = best.label[0]
+            # spawn a refit e re-predict thread if not already running
+            if not (refit_thread and refit_thread.is_alive()):
+                refit_thread = threading.Thread(
+                    name='refit_and_predict',
+                    target=refit_and_predict_chunks, args=(clf, audio))
+                refit_thread.start()
+        elif typed.strip().lower() == 's':  # skip
+            best.truth = 'SKIP'
+            continue
+        elif typed.strip().lower() == 'a':  # again
+            continue
         else:
             break
-    return best_first
