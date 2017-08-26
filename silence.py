@@ -109,12 +109,14 @@ def _gen_join_almost_silent(chunks, min_audible_len):
 
 
 @lru_cache()
-def get_chunks(audio, min_audible_len=150, target_audible_len=2000):
+def get_chunks(audio, min_audible_len=300, target_audible_len=2000,
+               load_if_available=True):
 
     # try to load from disk
-    loaded = load_chunks(audio)
-    if loaded:
-        return loaded
+    if load_if_available:
+        loaded = load_chunks(audio)
+        if loaded:
+            return loaded
 
     chunks = detect_silence_and_audible(audio)
     for iteration in itertools.count(1):
