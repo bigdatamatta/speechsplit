@@ -4,7 +4,7 @@ from mock import patch
 from pydub.generators import Sine
 
 from speechsplit import (CLASSES, SPEAKER, TRANSLATOR, build_training_data,
-                         extract_audio_features, smooth_bumps)
+                         get_features, smooth_bumps)
 
 
 def example_lines(example):
@@ -58,22 +58,22 @@ AUDIO_STUB = Sine(440).to_audio_segment(10100)
 
 
 # remove lru caching for testing
-extract_audio_features = extract_audio_features.__wrapped__
+get_features = get_features.__wrapped__
 
 
 @pytest.mark.parametrize('size', [100, 333])
-def test_split_does_not_change_extract_audio_features(size):
+def test_split_does_not_change_get_features(size):
     assert len(AUDIO_STUB) == 10100
-    mfcc1, loud1 = extract_audio_features(AUDIO_STUB)  # no segmentation
-    mfcc2, loud2 = extract_audio_features(
+    mfcc1, loud1 = get_features(AUDIO_STUB)  # no segmentation
+    mfcc2, loud2 = get_features(
         AUDIO_STUB, max_windows_per_segment=size)
     assert np.all(np.isclose(mfcc1, mfcc2))
     assert np.all(np.isclose(loud1, loud2))
 
 
 @pytest.mark.xfail(raises=AssertionError)
-def test_split_too_small_in_extract_audio_features():
-    extract_audio_features(AUDIO_STUB, max_windows_per_segment=10)
+def test_split_too_small_in_get_features():
+    get_features(AUDIO_STUB, max_windows_per_segment=10)
 
 
 SPE, TRA = [CLASSES[v] for v in SPEAKER, TRANSLATOR]
@@ -99,8 +99,8 @@ def test_build_training_data(
     speaker_features, translator_features, X_all, y_all = map(
         np.array, (speaker_features, translator_features, X_all, y_all))
 
-    # mock extract_audio_features as the identity function...
-    with patch('speechsplit.extract_audio_features', side_effect=lambda x: x):
+    # mock get_features as the identity function...
+    with patch('speechsplit.get_features', side_effect=lambda x: x):
 
         # ... and simply make the audio stubs directly equal to their features
         labeled_audios = {SPEAKER: speaker_features,

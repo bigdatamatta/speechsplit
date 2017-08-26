@@ -46,7 +46,7 @@ WINDOW_LENGTH = 25  # the length of the analysis window in milliseconds
 
 
 @lru_cache()
-def extract_audio_features(audio, max_windows_per_segment=100000):
+def get_features(audio, max_windows_per_segment=100000):
     """Compute audio features of pydub audio:
         Mel-filterbank energy features and loudness (in dBFS).
 
@@ -111,11 +111,11 @@ def extract_audio_features(audio, max_windows_per_segment=100000):
 
 
 def get_mfcc(audio):
-    return extract_audio_features(audio)[0]
+    return get_features(audio)[0]
 
 
 def get_loudness(audio):
-    return extract_audio_features(audio)[1]
+    return get_features(audio)[1]
 
 
 # CLASSIFICATION ############################################################
@@ -161,7 +161,7 @@ DEFAULT_FILTER = louder_than(-33)
 def build_training_data(labeled_audios, filter=DEFAULT_FILTER):
 
     label_to_mfcc = [
-        (label, filter(*extract_audio_features(labeled_audios[label])))
+        (label, filter(*get_features(labeled_audios[label])))
         for label in VOICES]
 
     X_all = np.concatenate([mfcc for label, mfcc in label_to_mfcc])
@@ -201,7 +201,7 @@ def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
 
 
 def predict(clf, audio, filter=DEFAULT_FILTER):
-    mfcc = filter(*extract_audio_features(audio))
+    mfcc = filter(*get_features(audio))
     prediction = clf.predict(mfcc)
     count_voice, voice = max(
         (np.count_nonzero(prediction == CLASSES[voice]), voice)
