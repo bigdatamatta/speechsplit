@@ -200,9 +200,18 @@ def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
     return grid.best_estimator_
 
 
-def predict(clf, audio, filter=DEFAULT_FILTER):
-    mfcc = filter(*get_features(audio))
-    prediction = clf.predict(mfcc)
+def get_prediction_array(clf, features, chunk, filter=DEFAULT_FILTER):
+    # cut features to this chunk
+    start, end = chunk.start / WINDOW_STEP, chunk.end / WINDOW_STEP
+    mfcc, loudness = features
+    mfcc, loudness = mfcc[start:end], loudness[start:end]
+
+    mfcc = filter(mfcc, loudness)
+    return clf.predict(mfcc)
+
+
+def predict_one_chunk(clf, features, chunk, filter=DEFAULT_FILTER):
+    prediction = get_prediction_array(clf, features, chunk, filter)
     count_voice, voice = max(
         (np.count_nonzero(prediction == CLASSES[voice]), voice)
         for voice in VOICES)
@@ -210,10 +219,10 @@ def predict(clf, audio, filter=DEFAULT_FILTER):
 
 
 def predict_chunks(clf, audio, filter=DEFAULT_FILTER):
-    chunks = get_chunks(audio)
+    chunks, features = get_chunks(audio), get_features(audio)
     for chunk in chunks:
         if chunk.truth not in TRUTH_OPTIONS:
-            chunk.label = predict(clf, chunk.cut(audio), filter)
+            chunk.label = predict_one_chunk(clf, features, chunk, filter)
     return chunks
 
 
@@ -229,3 +238,37 @@ def collect_most_certain(chunks, min_proportion):
 
 def to_segments(audio, chunks):
     return [chunk.cut(audio) for chunk in chunks]
+
+
+def refit(clf, audio):
+    chunks = get_chunks(audio)
+    labeled_audios = {voice: sum(chunk.cut(audio)
+                                 for chunk in chunks if chunk.truth == voice)
+                      for voice in VOICES}
+
+    clf.fit(*build_training_data(labeled_audios))
+
+
+def confirm_truth(clf, audio, voice, limit=10):
+    chunks = get_chunks(audio)
+    print('Confirm pressing ENTER as long as the audios are from {}'.format(
+        voice.upper()))
+    print('Type anything else to stop.')
+    for count in range(limit):
+        # refit(clf, audio)
+        # predict_chunks(clf, audio)
+        unknown = [c for c in chunks
+                   if not c.truth and c.label[0] == voice]
+        best_first = sorted(unknown, key=lambda c: (c.label[1], c.audible_len),
+                            reverse=True)
+        if not best_first:
+            break
+
+        best = best_first[0]
+        print ('#' * 30, best.label)
+        play(best.cut(audio))
+        if not raw_input():
+            best.truth = best.label[0]
+        else:
+            break
+    return best_first
