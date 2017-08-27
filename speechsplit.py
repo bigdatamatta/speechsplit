@@ -220,8 +220,9 @@ def predict_one_chunk(clf, features, chunk, filter=DEFAULT_FILTER):
     return (voice, count_voice / float(len(prediction)))
 
 
-def predict_chunks(clf, audio, filter=DEFAULT_FILTER):
-    chunks, features = get_chunks(audio), get_features(audio)
+def predict_chunks(clf, audio, chunks=None, filter=DEFAULT_FILTER):
+    chunks = chunks or get_chunks(audio)
+    features = get_features(audio)
     for chunk in chunks:
         if chunk.truth not in TRUTH_OPTIONS:
             chunk.label = predict_one_chunk(clf, features, chunk, filter)
@@ -276,19 +277,27 @@ def spawn_refit_and_predict(clf, audio):
         refit_thread.start()
 
 
-def confirm_truth(clf, audio, voice, group=10, limit=10, speed=1):
+def confirm_truth(clf, audio, chunk_group_or_voice,
+                  group=10, limit=10, speed=1):
     chunks = get_chunks(audio)
     print('Confirm label classifications.')
     print('Type:')
     print('      * just ENTER to confirm'
-          '      * "s" to skip the audio\n'
+          '      * "s" to set SPEAKER as ground truth\n'
+          '      * "t" to set TRANSLATOR as ground truth\n'
+          '      * "b" to set BOTH as ground truth\n'
           '      * "a" to hear it again\n'
+          '      * "/" to inspect one by one\n'
           '      * and anything else to stop.')
 
     while(limit):
         limit = limit - 1  # we need to explicitly decrement to enable repeat
-        unknown = [c for c in chunks
-                   if not c.truth and c.label[0] == voice]
+        if chunk_group_or_voice in VOICES:
+            unknown = [c for c in chunks
+                       if not c.truth and c.label[0] == chunk_group_or_voice]
+        else:
+            unknown = [c for c in chunk_group_or_voice if not c.truth]
+
         best_first = sorted(unknown, key=lambda c: (c.label[1], c.audible_len),
                             reverse=True)[:group]
         if not best_first:
