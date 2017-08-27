@@ -44,7 +44,7 @@ def seek_split(audio, level=0):
 
 
 def get_audio_id(audio):
-    return sha1(audio[:1000].get_array_of_samples()).hexdigest()[:10]
+    return sha1(audio.get_array_of_samples()).hexdigest()[:10]
 
 
 CACHE_DIR = '.cache'
