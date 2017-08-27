@@ -1,7 +1,8 @@
 import numpy as np
 import pytest
 
-from utils import get_first_and_last_from_iterator, intervals_where, timerepr
+from utils import (flatten, get_first_and_last_from_iterator, intervals_where,
+                   timerepr)
 
 
 def test_first_and_last_from_iter():
@@ -37,3 +38,7 @@ def to_milliseconds(hour, minute, second, millis):
 ])
 def test_timerepr(millis, output):
     assert timerepr(millis) == output
+
+
+def test_flatten():
+    assert [1, 2, 3, 4, 5, 6] == flatten([[1, 2, 3], [4, 5, 6]])

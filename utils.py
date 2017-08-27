@@ -49,4 +49,9 @@ AudioSegment.__repr__ = audio_segment_repr_patch
 def play(audio, speed=1):
     with NamedTemporaryFile("w+b", suffix=".wav") as f:
         audio.export(f.name, "wav")
-        subprocess.call(["mpv", "--speed", str(speed), f.name])
+        subprocess.call(["mpv", "--osd-fractions", "--speed", str(speed),
+                         f.name])
+
+
+def flatten(iterables):
+    return [x for iterable in iterables for x in iterable]

@@ -95,6 +95,10 @@ class Chunk(Bunch):
     def cut(self, audio):
         return audio[self.start:self.end]
 
+    def __hash__(self):
+        return hash((self.silence_start, self.start, self.end, self.level,
+                     self.truth, self.label))
+
 
 def _gen_join_almost_silent(chunks, min_audible_len):
     'join each almost silent chunk as a silence beginning the following one'
