@@ -1,9 +1,11 @@
 
+import os
 import subprocess
 from itertools import groupby
 from tempfile import NamedTemporaryFile
 
 import numpy as np
+import yaml
 from pydub import AudioSegment
 
 
@@ -55,3 +57,14 @@ def play(audio, speed=1):
 
 def flatten(iterables):
     return [x for iterable in iterables for x in iterable]
+
+
+def save_yaml(filename, thing):
+    with open(filename, 'w') as yaml_file:
+        yaml.dump(thing, yaml_file)
+
+
+def load_yaml(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r') as yaml_file:
+            return yaml.load(yaml_file)
