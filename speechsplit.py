@@ -129,7 +129,7 @@ TRUTH_OPTIONS = [BOTH] + VOICES
 CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
-def get_some_chunks_with_set_truth(chunks, min_duration=5000):
+def get_some_chunks_with_set_truth(chunks, min_duration=10000):
     # TODO: use this in pre_label !!!!
     samples = defaultdict(list)
     for chunk in chunks:
@@ -143,7 +143,7 @@ def get_some_chunks_with_set_truth(chunks, min_duration=5000):
     return samples
 
 
-def pre_label(audio, min_duration=5000):
+def pre_label(audio, min_duration=10000):
     question = Menu(TRUTH_OPTIONS,
                     title="Who's speaking in the audio you just heard?")
     accumulated_samples = defaultdict(lambda: AudioSegment.silent(0))
