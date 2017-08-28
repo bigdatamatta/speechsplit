@@ -268,11 +268,6 @@ def get_percentile_best_labeled(chunks, percentile, min_audible_len=1000):
     return get_best_labeled(chunks, limit, min_audible_len)
 
 
-def get_chunks_by_truth(chunks):
-    return {voice: [c for c in chunks if c.truth == voice]
-            for voice in VOICES}
-
-
 def refit(clf, features, training_chunks):
     clf.fit(*build_training_data(features, training_chunks))
 
@@ -290,6 +285,16 @@ def refit_and_predict_chunks(clf, features, training_chunks, chunks):
     ))
 
 
+def start_classification(audio):
+    pre_label(audio)
+    clf = SVC(C=1, gamma=0.001, kernel='rbf', random_state=0)
+    features = get_features(audio)
+    chunks = get_chunks(audio)
+    refit_and_predict_chunks(
+        clf, features, get_some_chunks_with_set_truth(chunks), chunks)
+    return clf
+
+
 def spawn_refit_and_predict(clf, features, training_chunks, chunks):
     # spawn a refit e re-predict thread if not already running
     refit_is_running = [t for t in threading.enumerate()
@@ -305,6 +310,7 @@ def spawn_refit_and_predict(clf, features, training_chunks, chunks):
 
 def confirm_truth(clf, audio, chunk_group_or_voice,
                   group=10, limit=10, speed=1):
+    features = get_features(audio)
     chunks = get_chunks(audio)
     print('Confirm label classifications.')
     print('Type:')
@@ -315,6 +321,11 @@ def confirm_truth(clf, audio, chunk_group_or_voice,
           '      * "a" to hear it again\n'
           '      * "/" to inspect one by one\n'
           '      * and anything else to stop.')
+
+    def _refit_and_predict():
+        training_chunks = {voice: [c for c in chunks if c.truth == voice]
+                           for voice in VOICES}
+        spawn_refit_and_predict(clf, features, training_chunks, chunks)
 
     while(limit):
         limit = limit - 1  # we need to explicitly decrement to enable repeat
@@ -344,22 +355,31 @@ def confirm_truth(clf, audio, chunk_group_or_voice,
             # default to label as ground truth
             for best in best_first:
                 best.truth = best.label[0]
-            spawn_refit_and_predict(clf, audio, get_chunks_by_truth(chunks))
+            _refit_and_predict()
         elif truth_option:
-            # set explicitly
+            # truth value set explicitly
             for best in best_first:
                 best.truth = truth_option
-            spawn_refit_and_predict(clf, audio, get_chunks_by_truth(chunks))
+            _refit_and_predict()
         elif typed == 'a':
             # play again
             limit = limit + 1  # restore limit
             continue
         elif typed == '/':
             # start inspecting one by one
+            # increase limit to inspect at least all group
+            limit = limit + group
             group = 1
+            speed = 1  # slow down
             continue
         else:
             break
+
+
+def alternate_confirm_truth(clf, audio, group=10, limit=10, speed=1):
+    for i in range(limit):
+        for voice in VOICES:
+            confirm_truth(clf, audio, voice, group, 1, speed)
 
 
 def copy_chunks(chunks):
