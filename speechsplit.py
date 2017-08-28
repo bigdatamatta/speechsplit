@@ -256,15 +256,16 @@ def to_segments(audio, chunks):
     return [chunk.cut(audio) for chunk in chunks]
 
 
-def get_best_labeled(chunks, limit=None):
-    # give preference to larger chunks
-    return sorted(chunks, key=lambda c: (c.label[1], c.audible_len),
+def get_best_labeled(chunks, limit=None, min_audible_len=1000):
+    # enforce min audible length and  give preference to larger chunks
+    return sorted([c for c in chunks if c.audible_len > min_audible_len],
+                  key=lambda c: (round(c.label[1], 2), c.audible_len),
                   reverse=True)[:limit]
 
 
-def get_percentile_best_labeled(chunks, percentile):
+def get_percentile_best_labeled(chunks, percentile, min_audible_len=1000):
     limit = int(ceil(len(chunks) * percentile / 100.0))
-    return get_best_labeled(chunks, limit)
+    return get_best_labeled(chunks, limit, min_audible_len)
 
 
 def get_chunks_by_truth(chunks):
@@ -323,10 +324,14 @@ def confirm_truth(clf, audio, chunk_group_or_voice,
         else:
             unknown = [c for c in chunk_group_or_voice if not c.truth]
 
-        best_first = get_best_labeled(unknown, group)
+        best_first = get_best_labeled(unknown, group, 1000)
 
         if not best_first:
-            break
+            # give up min audible length
+            best_first = get_best_labeled(unknown, group, 0)
+            if not best_first:
+                # really done
+                break
 
         for best in best_first:
             print('#' * 30, best.label, chunks.index(best))
@@ -369,7 +374,7 @@ def error_in_chunks(chunks):
 def get_best_percentile(chunks, percentile):
     # have at least pre labeled for the refit
     pre_labeled = flatten(get_some_chunks_with_set_truth(chunks).values())
-    best_labeled = get_percentile_best_labeled(chunks, percentile)
+    best_labeled = get_percentile_best_labeled(chunks, percentile, 1000)
     chunks = set(best_labeled) | set(pre_labeled)
 
     return {voice: [c for c in chunks if c.label[0] == voice]
@@ -418,7 +423,15 @@ def run_experiment_refit_separating_best(clf, audio, percentile=5):
                 for c in labeled:
                     c.label = (c.truth, 1)
             else:
-                labeled += get_percentile_best_labeled(remaining, percentile)
+                best = [get_percentile_best_labeled(
+                    [c for c in remaining if c.label[0] == voice],
+                    percentile, 1000)
+                    for voice in VOICES]
+                print('------ best sizes: ', map(len, best))
+                if not all(best):
+                    break
+                best = flatten(best)
+                labeled += best
             remaining = [c for c in remaining if c not in labeled]
             training_chunks = {
                 voice: [c for c in labeled if c.label[0] == voice]
@@ -426,10 +439,10 @@ def run_experiment_refit_separating_best(clf, audio, percentile=5):
 
             refit_and_predict_chunks(clf, features, training_chunks, chunks)
             # important to make a copy of chunks because it changes over time
-            evolution.append((labeled, remaining, copy_chunks(chunks)))
-            print(map(len, (labeled, remaining, chunks)))
-            print(map(lambda x: len(x) / float(len(chunks)),
-                      (labeled, remaining, chunks)))
+            evolution.append(map(copy_chunks, (labeled, remaining, chunks)))
+            print(':::::: ', map(len, (labeled, remaining, chunks)))
+            # print(map(lambda x: len(x) / float(len(chunks)),
+            #           (labeled, remaining, chunks)))
             print(error_in_chunks(labeled),
                   error_in_chunks(remaining), error_in_chunks(chunks))
 
@@ -440,8 +453,8 @@ def run_experiment_refit_separating_best(clf, audio, percentile=5):
 
     print('\nThese were the error percentages in chunk classification'
           ' at each percentile:')
-    print('iteration | in laaeled | in remaining | in all chunks')
-    for i, cc in enumerate(evolution):
+    print('iteration | in labeled | in remaining | in all chunks')
+    for i, (labeled, remaining, chunks) in enumerate(evolution):
         print(i, error_in_chunks(labeled),
               error_in_chunks(remaining), error_in_chunks(chunks))
     return evolution
