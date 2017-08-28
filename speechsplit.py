@@ -129,7 +129,7 @@ TRUTH_OPTIONS = [BOTH] + VOICES
 CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
-def get_pre_labeled_chunks(chunks, min_duration=5000):
+def get_some_chunks_with_set_truth(chunks, min_duration=5000):
     # TODO: use this in pre_label !!!!
     samples = defaultdict(list)
     for chunk in chunks:
@@ -176,11 +176,11 @@ def louder_than(dbfs):
 DEFAULT_FILTER = louder_than(-33)
 
 
-def build_training_data(features, label_to_chunks, filter=DEFAULT_FILTER):
+def build_training_data(features, training_chunks, filter=DEFAULT_FILTER):
 
     label_to_mfcc = [
         (label, np.concatenate([get_mfcc_from_chunk(features, chunk, filter)
-                                for chunk in label_to_chunks[label]]))
+                                for chunk in training_chunks[label]]))
         for label in VOICES]
 
     X_all = np.concatenate([mfcc for label, mfcc in label_to_mfcc])
@@ -236,9 +236,7 @@ def predict_one_chunk(clf, features, chunk, filter=DEFAULT_FILTER):
     return (voice, count_voice / float(len(prediction)))
 
 
-def predict_chunks(clf, audio, chunks=None, filter=DEFAULT_FILTER):
-    chunks = chunks or get_chunks(audio)
-    features = get_features(audio)
+def predict_chunks(clf, features, chunks, filter=DEFAULT_FILTER):
     for chunk in chunks:
         chunk.label = predict_one_chunk(clf, features, chunk, filter)
     return chunks
@@ -269,36 +267,21 @@ def get_percentile_best_labeled(chunks, percentile):
     return get_best_labeled(chunks, limit)
 
 
-def refit(clf, audio, percentile):
-    all_chunks = get_chunks(audio)
-    if percentile == 'truth':
-        # use all set ground truth to refit
-        def get_voice(chunk):
-            return chunk.truth
-        chunks = all_chunks
-    else:
-        # use a percentile of the best labeled to refit
-        def get_voice(chunk):
-            return chunk.label[0]
-
-        # have at least pre labeled for the refit
-        pre_labeled = flatten(get_pre_labeled_chunks(all_chunks).values())
-        best_labeled = get_percentile_best_labeled(all_chunks, percentile)
-        chunks = set(best_labeled) | set(pre_labeled)
-
-    label_to_chunks = {voice: [c for c in chunks if get_voice(c) == voice]
-                       for voice in VOICES}
-
-    features = get_features(audio)
-    clf.fit(*build_training_data(features, label_to_chunks))
+def get_chunks_by_truth(chunks):
+    return {voice: [c for c in chunks if c.truth == voice]
+            for voice in VOICES}
 
 
-def refit_and_predict_chunks(clf, audio, percentile):
+def refit(clf, features, training_chunks):
+    clf.fit(*build_training_data(features, training_chunks))
+
+
+def refit_and_predict_chunks(clf, features, training_chunks, chunks):
     start_time = timeit.default_timer()
     print('.......... refit and re-predict started ..........')
 
-    refit(clf, audio, percentile)
-    predict_chunks(clf, audio)
+    refit(clf, features, training_chunks)
+    predict_chunks(clf, features, chunks)
 
     elapsed = timeit.default_timer() - start_time
     print('---------- refit and re-predict DONE (in {}) ----------'.format(
@@ -306,14 +289,15 @@ def refit_and_predict_chunks(clf, audio, percentile):
     ))
 
 
-def spawn_refit_and_predict(clf, audio, percentile):
+def spawn_refit_and_predict(clf, features, training_chunks, chunks):
     # spawn a refit e re-predict thread if not already running
     refit_is_running = [t for t in threading.enumerate()
                         if t.name == 'refit_and_predict']
     if not refit_is_running:
         refit_thread = threading.Thread(
             name='refit_and_predict',
-            target=refit_and_predict_chunks, args=(clf, audio, percentile))
+            target=refit_and_predict_chunks,
+            args=(clf, features, training_chunks, chunks))
         refit_thread.setDaemon(True)
         refit_thread.start()
 
@@ -355,12 +339,12 @@ def confirm_truth(clf, audio, chunk_group_or_voice,
             # default to label as ground truth
             for best in best_first:
                 best.truth = best.label[0]
-            spawn_refit_and_predict(clf, audio, 'truth')
+            spawn_refit_and_predict(clf, audio, get_chunks_by_truth(chunks))
         elif truth_option:
             # set explicitly
             for best in best_first:
                 best.truth = truth_option
-            spawn_refit_and_predict(clf, audio, 'truth')
+            spawn_refit_and_predict(clf, audio, get_chunks_by_truth(chunks))
         elif typed == 'a':
             # play again
             limit = limit + 1  # restore limit
@@ -382,18 +366,30 @@ def error_in_chunks(chunks):
     return len(wrong) / float(len(chunks))
 
 
+def get_best_percentile(chunks, percentile):
+    # have at least pre labeled for the refit
+    pre_labeled = flatten(get_some_chunks_with_set_truth(chunks).values())
+    best_labeled = get_percentile_best_labeled(chunks, percentile)
+    chunks = set(best_labeled) | set(pre_labeled)
+
+    return {voice: [c for c in chunks if c.label[0] == voice]
+            for voice in VOICES}
+
+
 def run_experiment_refit_by_increasing_percentiles(clf, audio, step=5):
     chunks = get_chunks(audio)
     features = get_features(audio)
 
     # begin with just pre labeled data
-    clf.fit(*build_training_data(features, get_pre_labeled_chunks(chunks)))
-    predict_chunks(clf, audio)
+    clf.fit(*build_training_data(features,
+                                 get_some_chunks_with_set_truth(chunks)))
+    predict_chunks(clf, features, chunks)
     evolution = [(0, copy_chunks(chunks))]
 
     try:
         for percentile in range(step, 101, step):
-            refit_and_predict_chunks(clf, audio, percentile)
+            training_chunks = get_best_percentile(chunks, percentile)
+            refit_and_predict_chunks(clf, features, training_chunks, chunks)
             evolution.append((percentile, copy_chunks(chunks)))
     except Exception as e:
         print("XXXX ERROR XXXX. "
@@ -404,4 +400,48 @@ def run_experiment_refit_by_increasing_percentiles(clf, audio, step=5):
           ' at each percentile:')
     for p, cc in evolution:
         print p, error_in_chunks(cc)
+    return evolution
+
+
+def run_experiment_refit_separating_best(clf, audio, percentile=5):
+    remaining = chunks = get_chunks(audio)
+    features = get_features(audio)
+    labeled = []
+    evolution = []
+
+    try:
+        while(remaining):
+            if not labeled:
+                # begin with just pre labeled data
+                labeled = flatten(
+                    get_some_chunks_with_set_truth(chunks).values())
+                for c in labeled:
+                    c.label = (c.truth, 1)
+            else:
+                labeled += get_percentile_best_labeled(remaining, percentile)
+            remaining = [c for c in remaining if c not in labeled]
+            training_chunks = {
+                voice: [c for c in labeled if c.label[0] == voice]
+                for voice in VOICES}
+
+            refit_and_predict_chunks(clf, features, training_chunks, chunks)
+            # important to make a copy of chunks because it changes over time
+            evolution.append((labeled, remaining, copy_chunks(chunks)))
+            print(map(len, (labeled, remaining, chunks)))
+            print(map(lambda x: len(x) / float(len(chunks)),
+                      (labeled, remaining, chunks)))
+            print(error_in_chunks(labeled),
+                  error_in_chunks(remaining), error_in_chunks(chunks))
+
+    except Exception as e:
+        print("XXXX ERROR XXXX. "
+              "Couldn't proceed after percentile: ", percentile)
+        print e
+
+    print('\nThese were the error percentages in chunk classification'
+          ' at each percentile:')
+    print('iteration | in laaeled | in remaining | in all chunks')
+    for i, cc in enumerate(evolution):
+        print(i, error_in_chunks(labeled),
+              error_in_chunks(remaining), error_in_chunks(chunks))
     return evolution
