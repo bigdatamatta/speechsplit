@@ -1,4 +1,3 @@
-
 import threading
 import timeit
 from collections import defaultdict
@@ -15,7 +14,7 @@ from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
 from silence import Chunk, get_chunks
-from utils import flatten, intervals_where, play, timerepr
+from utils import flatten, intervals_where, play, save_yaml, timerepr
 
 # DATA TREATMENT  #######################################################
 
@@ -477,4 +476,17 @@ def run_experiment_refit_separating_best(clf, audio, percentile=5):
     for i, (labeled, remaining, chunks) in enumerate(evolution):
         print(i, error_in_chunks(labeled),
               error_in_chunks(remaining), error_in_chunks(chunks))
+    return evolution
+
+
+def load_run_experiment_and_save(filename):
+    clf = SVC(C=1, gamma=0.001, kernel='rbf', random_state=0)
+    audio = AudioSegment.from_wav(filename)
+
+    evolution = run_experiment_refit_separating_best(clf, audio)
+
+    exp_filename = 'data/experiments/' + filename.split('/')[-1]
+    exp_filename = exp_filename.replace('.wav', '.yaml')
+    save_yaml(exp_filename, evolution)
+
     return evolution
