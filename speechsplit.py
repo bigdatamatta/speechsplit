@@ -97,17 +97,16 @@ TRUTH_OPTIONS = [BOTH] + VOICES
 CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
-def get_some_chunks_with_set_truth(chunks, operation_on_chunk=None,
-                                   # 10 seconds
-                                   min_duration=10000):
+def get_some_chunks_with_set_truth(chunks, min_duration=10000,  # 10 seconds
+                                   operation=None):
     '''Aggregate some chunks by ground truth.
     Each group must have at least min_duration total audible duration'''
 
     samples = defaultdict(list)
     for chunk in chunks:
 
-        if operation_on_chunk:
-            operation_on_chunk(chunk)
+        if operation:
+            operation(chunk)
 
         # accumulate segment on proper sample
         if chunk.truth in VOICES:
@@ -212,7 +211,7 @@ def start_classification(audio):
     features = get_features(audio)
     chunks = get_chunks(audio)
     # pre label if nececessary
-    get_some_chunks_with_set_truth(chunks, ask_operation)
+    get_some_chunks_with_set_truth(chunks, operation=ask_operation)
 
     refit_and_predict_chunks(
         clf, features, get_some_chunks_with_set_truth(chunks), chunks)
