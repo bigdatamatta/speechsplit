@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from mock import patch
+from mock import Mock, patch
 from pydub.generators import Sine
 
 from speechsplit import (CLASSES, SPEAKER, TRANSLATOR, build_training_data,
@@ -52,35 +52,32 @@ SPE, TRA = [CLASSES[v] for v in SPEAKER, TRANSLATOR]
 ___, BIG = False, True
 
 
-@pytest.mark.skip('TODO... fix this')
 @pytest.mark.parametrize(
-    'speaker_features, translator_features, X_all, y_all', [[
+    'features, speaker_chunks, translator_chunks, X_all, y_all', [[
         (
-            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-            [___, BIG, ___, ___, ___, BIG, BIG, BIG, BIG, ___],
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0,
+             0.1, 1.1, 2.1, 3.1, 4.1, 5.1, 6.1],
+            [___, BIG, ___, ___, ___, BIG, BIG, BIG, BIG, ___,
+             ___, BIG, ___, ___, ___, BIG, BIG],
         ),
-        (
-            [0.1, 1.1, 2.1, 3.1, 4.1, 5.1, 6.1],
-            [___, BIG, ___, ___, ___, BIG, BIG],
-        ),
+        [Mock(start=0, end=100)], [Mock(start=100, end=170)],
         [1.0, 5.0, 6.0, 7.0, 8.0, 1.1, 5.1, 6.1],
         [SPE, SPE, SPE, SPE, SPE, TRA, TRA, TRA]
     ], ])
-def test_build_training_data(
-        speaker_features, translator_features, X_all, y_all):
+def test_build_training_data(features, speaker_chunks, translator_chunks,
+                             X_all, y_all):
 
-    speaker_features, translator_features, X_all, y_all = map(
-        np.array, (speaker_features, translator_features, X_all, y_all))
+    features, X_all, y_all = map(np.array, (features, X_all, y_all))
 
     # mock get_features as the identity function...
     with patch('speechsplit.get_features', side_effect=lambda x: x):
 
         # ... and simply make the audio stubs directly equal to their features
-        labeled_audios = {SPEAKER: speaker_features,
-                          TRANSLATOR: translator_features}
+        training_chunks = {SPEAKER: speaker_chunks,
+                           TRANSLATOR: translator_chunks}
 
         X, y = build_training_data(
-            labeled_audios,
+            features, training_chunks,
             lambda mfcc, loudness: mfcc[loudness.astype(bool)])
         assert all(X_all == X)
         assert all(y_all == y)
