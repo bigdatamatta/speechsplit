@@ -8,6 +8,64 @@ from bunch import Bunch
 from functools32 import lru_cache
 from pydub.silence import detect_silence
 
+
+class Chunk(Bunch):
+
+    """Audio fragment metadata for classification"""
+
+    def __init__(self, silence_start, start, end, level=-1,
+                 truth=None, label=None):
+        self.silence_start = silence_start  # start of silence at the beginning
+        self.start = start  # start of audible part
+        self.end = end      # end of audible part
+        self.level = level  # level of split that created this chunk
+        self.truth = truth  # ground truth label
+        self.label = label  # label obtained by the classifier
+
+    @property
+    def len(self):
+        return self.end - self.silence_start
+
+    @property
+    def audible_len(self):
+        return self.end - self.start
+
+    def cut(self, audio):
+        return audio[self.start:self.end]
+
+    def __hash__(self):
+        return hash((self.silence_start, self.start, self.end, self.level,
+                     self.truth, self.label))
+
+
+def get_audio_id(audio):
+    return sha1(audio.get_array_of_samples()).hexdigest()[:10]
+
+
+CACHE_DIR = '.cache'
+
+
+def get_audio_chunks_filename(audio):
+    audio_id = get_audio_id(audio)
+    return '{}/{}.chunks.yaml'.format(CACHE_DIR, audio_id)
+
+
+def save_chunks(audio, chunks):
+    if not os.path.exists(CACHE_DIR):
+        os.makedirs(CACHE_DIR)
+    filename = get_audio_chunks_filename(audio)
+    with open(filename, 'w') as chunks_file:
+        yaml.safe_dump(chunks, chunks_file)
+
+
+def load_chunks(audio):
+    filename = get_audio_chunks_filename(audio)
+    if os.path.exists(filename):
+        with open(filename, 'r') as chunks_file:
+            return [Chunk(**kwargs)
+                    for kwargs in yaml.safe_load(chunks_file)]
+
+
 SILENCE_LEVELS = [{'silence_thresh': t, 'min_silence_len': l}
                   for t in range(-42, -33)
                   for l in range(500, 100, -100)]
@@ -41,63 +99,6 @@ def seek_split(audio, level=0):
             return chunks
     else:
         return chunks
-
-
-def get_audio_id(audio):
-    return sha1(audio.get_array_of_samples()).hexdigest()[:10]
-
-
-CACHE_DIR = '.cache'
-
-
-def get_audio_chunks_filename(audio):
-    audio_id = get_audio_id(audio)
-    return '{}/{}.chunks.yaml'.format(CACHE_DIR, audio_id)
-
-
-def save_chunks(audio, chunks):
-    if not os.path.exists(CACHE_DIR):
-        os.makedirs(CACHE_DIR)
-    filename = get_audio_chunks_filename(audio)
-    with open(filename, 'w') as chunks_file:
-        yaml.safe_dump(chunks, chunks_file)
-
-
-def load_chunks(audio):
-    filename = get_audio_chunks_filename(audio)
-    if os.path.exists(filename):
-        with open(filename, 'r') as chunks_file:
-            return [Chunk(**kwargs)
-                    for kwargs in yaml.safe_load(chunks_file)]
-
-
-class Chunk(Bunch):
-
-    """Audio fragment metadata for classification"""
-
-    def __init__(self, silence_start, start, end, level=-1,
-                 truth=None, label=None):
-        self.silence_start = silence_start  # start of silence at the beginning
-        self.start = start  # start of audible part
-        self.end = end      # end of audible part
-        self.level = level  # level of split that created this chunk
-        self.truth = truth  # ground truth label
-        self.label = label  # label obtained by the classifier
-
-    @property
-    def len(self):
-        return self.end - self.silence_start
-
-    @property
-    def audible_len(self):
-        return self.end - self.start
-
-    def cut(self, audio):
-        return audio[self.start:self.end]
-
-    def __hash__(self):
-        return hash((self.silence_start, self.start, self.end, self.level,
-                     self.truth, self.label))
 
 
 def _gen_join_almost_silent(chunks, min_audible_len):

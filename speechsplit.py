@@ -1,4 +1,3 @@
-import threading
 import timeit
 from collections import defaultdict
 from math import ceil
@@ -8,35 +7,12 @@ import python_speech_features
 from choice import Menu
 from functools32 import lru_cache
 from pydub import AudioSegment
-from sklearn.cross_validation import train_test_split
-from sklearn.grid_search import GridSearchCV
-from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
 from fragmentation import Chunk, get_chunks
-from utils import flatten, intervals_where, play, save_yaml, timerepr
+from utils import flatten, play, save_yaml, timerepr
 
-# DATA TREATMENT  #######################################################
-
-
-def smooth_bumps(data, value, width, margin):
-
-    for start, end in intervals_where(data == value):
-
-        # if the interval is a narrow bump ...
-        if end - start <= width:
-            before = data[start - margin:start]
-            after = data[end: end + margin]
-            surrounding_set = set(before) | set(after)
-
-            # ... and is surrounded by a unique value
-            if len(surrounding_set) == 1:
-                surrounding_value = surrounding_set.pop()
-                # replace all the bump with the surrounding value
-                data[start:end] = surrounding_value
-
-
-# FEATURE EXTRACTION  #######################################################
+# FEATURES ###################################################################
 
 
 def get_numpy_array_of_samples(audio):
@@ -112,15 +88,8 @@ def get_features(audio, max_windows_per_segment=10 * 6000):  # 6000 -> 1 min
     return mfcc, loudness
 
 
-def get_mfcc(audio):
-    return get_features(audio)[0]
+# CLASSIFICATION #############################################################
 
-
-def get_loudness(audio):
-    return get_features(audio)[1]
-
-
-# CLASSIFICATION ############################################################
 
 SPEAKER, TRANSLATOR, BOTH = 'speaker', 'translator', 'both'
 VOICES = [SPEAKER, TRANSLATOR]
@@ -128,10 +97,18 @@ TRUTH_OPTIONS = [BOTH] + VOICES
 CLASSES = {SPEAKER: 1, TRANSLATOR: 2}
 
 
-def get_some_chunks_with_set_truth(chunks, min_duration=10000):
-    # TODO: use this in pre_label !!!!
+def get_some_chunks_with_set_truth(chunks, operation_on_chunk=None,
+                                   # 10 seconds
+                                   min_duration=10000):
+    '''Aggregate some chunks by ground truth.
+    Each group must have at least min_duration total audible duration'''
+
     samples = defaultdict(list)
     for chunk in chunks:
+
+        if operation_on_chunk:
+            operation_on_chunk(chunk)
+
         # accumulate segment on proper sample
         if chunk.truth in VOICES:
             samples[chunk.truth].append(chunk)
@@ -140,28 +117,6 @@ def get_some_chunks_with_set_truth(chunks, min_duration=10000):
                for chunk_list in samples.values()):
             break
     return samples
-
-
-def pre_label(audio, min_duration=10000):
-    question = Menu(TRUTH_OPTIONS,
-                    title="Who's speaking in the audio you just heard?")
-    accumulated_samples = defaultdict(lambda: AudioSegment.silent(0))
-
-    for chunk in get_chunks(audio):
-        if chunk.truth not in TRUTH_OPTIONS:
-            play(chunk.cut(audio))
-            chunk.truth = question.ask()
-
-        # label from ground truth and accumulate segment on proper sample
-        if chunk.truth in VOICES:
-            chunk.label = (chunk.truth, 1)
-            accumulated_samples[chunk.truth] += chunk.cut(audio)
-
-        # terminate if we have enough labeled data
-        if all(len(a) >= min_duration for a in accumulated_samples.values()):
-            break
-
-    return accumulated_samples
 
 
 def loudness_between(min=-float('inf'), max=float('inf')):
@@ -173,6 +128,14 @@ def louder_than(dbfs):
 
 
 DEFAULT_FILTER = louder_than(-33)
+
+
+def get_mfcc_from_chunk(features, chunk, filter=DEFAULT_FILTER):
+    # cut features to this chunk
+    start, end = chunk.start / WINDOW_STEP, chunk.end / WINDOW_STEP
+    mfcc, loudness = features
+    mfcc, loudness = mfcc[start:end], loudness[start:end]
+    return filter(mfcc, loudness)
 
 
 def build_training_data(features, training_chunks, filter=DEFAULT_FILTER):
@@ -188,44 +151,6 @@ def build_training_data(features, training_chunks, filter=DEFAULT_FILTER):
     return X_all, y_all
 
 
-def score_prediction(clf, features, target):
-    y_pred = clf.predict(features)
-    return f1_score(target, y_pred)
-
-
-def train_and_score(clf, X_all, y_all):
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_all, y_all, test_size=.20, random_state=0)
-    clf.fit(X_train, y_train)
-    f1_score_train = score_prediction(clf, X_train, y_train)
-    f1_score_test = score_prediction(clf, X_test, y_test)
-    return f1_score_train, f1_score_test
-
-
-GRID_SEARCH_PARAMETERS = [
-    # {'C': [1, 10, 100], 'kernel': ['linear']},
-    {'C': [1, 10, 100], 'kernel': ['rbf'], 'gamma': [0.01, 0.001, 0.0001]},
-]
-
-
-def grid_search(X_all, y_all, parameters=GRID_SEARCH_PARAMETERS):
-    clf = SVC(random_state=0)
-    f1_scorer = make_scorer(f1_score)
-    grid = GridSearchCV(clf, parameters, scoring=f1_scorer, n_jobs=4)
-    f1_score_train, f1_score_test = train_and_score(grid, X_all, y_all)
-    print('F1 score on the train an test data:')
-    print(f1_score_train, f1_score_test)
-    return grid.best_estimator_
-
-
-def get_mfcc_from_chunk(features, chunk, filter=DEFAULT_FILTER):
-    # cut features to this chunk
-    start, end = chunk.start / WINDOW_STEP, chunk.end / WINDOW_STEP
-    mfcc, loudness = features
-    mfcc, loudness = mfcc[start:end], loudness[start:end]
-    return filter(mfcc, loudness)
-
-
 def predict_one_chunk(clf, features, chunk, filter=DEFAULT_FILTER):
     mfcc = get_mfcc_from_chunk(features, chunk, filter)
     prediction = clf.predict(mfcc)
@@ -239,20 +164,6 @@ def predict_chunks(clf, features, chunks, filter=DEFAULT_FILTER):
     for chunk in chunks:
         chunk.label = predict_one_chunk(clf, features, chunk, filter)
     return chunks
-
-
-def collect_most_certain(chunks, min_proportion):
-    collected = defaultdict(list)
-    for chunk in chunks:
-        if chunk.label:
-            voice, proportion = chunk.label
-            if proportion >= min_proportion:
-                collected[voice].append(chunk)
-    return collected
-
-
-def to_segments(audio, chunks):
-    return [chunk.cut(audio) for chunk in chunks]
 
 
 def get_best_labeled(chunks, limit=None, min_audible_len=1000):
@@ -285,100 +196,27 @@ def refit_and_predict_chunks(clf, features, training_chunks, chunks):
 
 
 def start_classification(audio):
-    pre_label(audio)
+    '''Bootstrap classification returning a classifier fit to some small sample
+    of chunks with set ground truth from each class'''
+
+    def ask_operation(chunk):
+        'ask the operator to classify this chunk'
+
+        question = Menu(TRUTH_OPTIONS,
+                        title="Who's speaking in the audio you just heard?")
+        if chunk.truth not in TRUTH_OPTIONS:
+            play(chunk.cut(audio))
+            chunk.truth = question.ask()
+
     clf = SVC(C=1, gamma=0.001, kernel='rbf', random_state=0)
     features = get_features(audio)
     chunks = get_chunks(audio)
+    # pre label if nececessary
+    get_some_chunks_with_set_truth(chunks, ask_operation)
+
     refit_and_predict_chunks(
         clf, features, get_some_chunks_with_set_truth(chunks), chunks)
     return clf
-
-
-def spawn_refit_and_predict(clf, features, training_chunks, chunks):
-    # spawn a refit e re-predict thread if not already running
-    refit_is_running = [t for t in threading.enumerate()
-                        if t.name == 'refit_and_predict']
-    if not refit_is_running:
-        refit_thread = threading.Thread(
-            name='refit_and_predict',
-            target=refit_and_predict_chunks,
-            args=(clf, features, training_chunks, chunks))
-        refit_thread.setDaemon(True)
-        refit_thread.start()
-
-
-def confirm_truth(clf, audio, chunk_group_or_voice,
-                  group=10, limit=10, speed=1):
-    features = get_features(audio)
-    chunks = get_chunks(audio)
-    print('Confirm label classifications.')
-    print('Type:')
-    print('      * just ENTER to confirm'
-          '      * "s" to set SPEAKER as ground truth\n'
-          '      * "t" to set TRANSLATOR as ground truth\n'
-          '      * "b" to set BOTH as ground truth\n'
-          '      * "a" to hear it again\n'
-          '      * "/" to inspect one by one\n'
-          '      * and anything else to stop.')
-
-    def _refit_and_predict():
-        training_chunks = {voice: [c for c in chunks if c.truth == voice]
-                           for voice in VOICES}
-        spawn_refit_and_predict(clf, features, training_chunks, chunks)
-
-    while(limit):
-        limit = limit - 1  # we need to explicitly decrement to enable repeat
-        if chunk_group_or_voice in VOICES:
-            unknown = [c for c in chunks
-                       if not c.truth and c.label[0] == chunk_group_or_voice]
-        else:
-            unknown = [c for c in chunk_group_or_voice if not c.truth]
-
-        best_first = get_best_labeled(unknown, group, 1000)
-
-        if not best_first:
-            # give up min audible length
-            best_first = get_best_labeled(unknown, group, 0)
-            if not best_first:
-                # really done
-                break
-
-        for best in best_first:
-            print('#' * 30, best.label, chunks.index(best))
-        play(sum(best.cut(audio) for best in best_first), speed)
-
-        typed = raw_input().strip().lower()
-        truth_option = {'s': SPEAKER, 't': TRANSLATOR, 'b': BOTH}.get(typed)
-
-        if not typed:
-            # default to label as ground truth
-            for best in best_first:
-                best.truth = best.label[0]
-            _refit_and_predict()
-        elif truth_option:
-            # truth value set explicitly
-            for best in best_first:
-                best.truth = truth_option
-            _refit_and_predict()
-        elif typed == 'a':
-            # play again
-            limit = limit + 1  # restore limit
-            continue
-        elif typed == '/':
-            # start inspecting one by one
-            # increase limit to inspect at least all group
-            limit = limit + group
-            group = 1
-            speed = 1  # slow down
-            continue
-        else:
-            break
-
-
-def alternate_confirm_truth(clf, audio, group=10, limit=10, speed=1):
-    for i in range(limit):
-        for voice in VOICES:
-            confirm_truth(clf, audio, voice, group, 1, speed)
 
 
 def copy_chunks(chunks):
@@ -390,44 +228,7 @@ def error_in_chunks(chunks):
     return len(wrong) / float(len(chunks))
 
 
-def get_best_percentile(chunks, percentile):
-    # have at least pre labeled for the refit
-    pre_labeled = flatten(get_some_chunks_with_set_truth(chunks).values())
-    best_labeled = get_percentile_best_labeled(chunks, percentile, 1000)
-    chunks = set(best_labeled) | set(pre_labeled)
-
-    return {voice: [c for c in chunks if c.label[0] == voice]
-            for voice in VOICES}
-
-
-def run_experiment_refit_by_increasing_percentiles(clf, audio, step=5):
-    chunks = get_chunks(audio)
-    features = get_features(audio)
-
-    # begin with just pre labeled data
-    clf.fit(*build_training_data(features,
-                                 get_some_chunks_with_set_truth(chunks)))
-    predict_chunks(clf, features, chunks)
-    evolution = [(0, copy_chunks(chunks))]
-
-    try:
-        for percentile in range(step, 101, step):
-            training_chunks = get_best_percentile(chunks, percentile)
-            refit_and_predict_chunks(clf, features, training_chunks, chunks)
-            evolution.append((percentile, copy_chunks(chunks)))
-    except Exception as e:
-        print("XXXX ERROR XXXX. "
-              "Couldn't proceed after percentile: ", percentile)
-        print e
-
-    print('\nThese were the error percentages in chunk classification'
-          ' at each percentile:')
-    for p, cc in evolution:
-        print p, error_in_chunks(cc)
-    return evolution
-
-
-def run_experiment_refit_separating_best(clf, audio, percentile=5):
+def refit_from_best(clf, audio, percentile=5):
     remaining = chunks = get_chunks(audio)
     features = get_features(audio)
     labeled = []
@@ -446,7 +247,6 @@ def run_experiment_refit_separating_best(clf, audio, percentile=5):
                     [c for c in remaining if c.label[0] == voice],
                     percentile, 1000)
                     for voice in VOICES]
-                print('------ best sizes: ', map(len, best))
                 if not all(best):
                     break
                 best = flatten(best)
@@ -483,7 +283,7 @@ def load_run_experiment_and_save(filename):
     clf = SVC(C=1, gamma=0.001, kernel='rbf', random_state=0)
     audio = AudioSegment.from_wav(filename)
 
-    evolution = run_experiment_refit_separating_best(clf, audio)
+    evolution = refit_from_best(clf, audio)
 
     exp_filename = 'data/experiments/' + filename.split('/')[-1]
     exp_filename = exp_filename.replace('.wav', '.yaml')

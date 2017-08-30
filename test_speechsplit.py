@@ -4,7 +4,7 @@ from mock import patch
 from pydub.generators import Sine
 
 from speechsplit import (CLASSES, SPEAKER, TRANSLATOR, build_training_data,
-                         get_features, smooth_bumps)
+                         get_features)
 
 
 def example_lines(example):
@@ -21,37 +21,6 @@ def example_lines(example):
                 not line.startswith('___') and
                 not line.startswith('|___') and
                 not line.startswith('#'))]
-
-
-def pairs(items):
-    "Test util that returns a list of pairs from a sequence"
-    items = iter(items)
-    return zip(items, items)
-
-
-def test_pairwise():
-    assert pairs([]) == []
-    assert pairs([1, 2, 3]) == [(1, 2)]
-    assert pairs([1, 2, 3, 4]) == [(1, 2), (3, 4)]
-
-
-# upper line is the input and bottom one the output
-smooth_bumps_examples = pairs(example_lines('''
-_______________|
-    ...    ....|
-           ....|
-_______________|
-..     ......  |
-       ......  |
-_______________|
-'''))
-
-
-@pytest.mark.parametrize('data, output', smooth_bumps_examples)
-def test_smooth_bumps(data, output):
-    data = np.array(list(data))
-    smooth_bumps(data, '.', margin=4, width=3)
-    assert ''.join(data) == output
 
 
 AUDIO_STUB = Sine(440).to_audio_segment(10100)

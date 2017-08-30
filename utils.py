@@ -48,11 +48,18 @@ def audio_segment_repr_patch(self):
 AudioSegment.__repr__ = audio_segment_repr_patch
 
 
-def play(audio, speed=1):
-    with NamedTemporaryFile("w+b", suffix=".wav") as f:
-        audio.export(f.name, "wav")
-        subprocess.call(["mpv", "--osd-fractions", "--speed", str(speed),
-                         f.name])
+def play(audio, chunk=None, speed=1):
+    if chunk:
+        audio = chunk.cut(audio)
+    try:
+        with NamedTemporaryFile("w+b", suffix=".wav") as f:
+            audio.export(f.name, "wav")
+            subprocess.call(["mpv", "--osd-fractions", "--speed", str(speed),
+                             f.name])
+    except OSError:
+        # mpv not installed... fall back to pydub play
+        from pydub.playback import play
+        play(audio)
 
 
 def flatten(iterables):
@@ -68,3 +75,7 @@ def load_yaml(filename):
     if os.path.exists(filename):
         with open(filename, 'r') as yaml_file:
             return yaml.load(yaml_file)
+
+
+def to_segments(audio, chunks):
+    return [chunk.cut(audio) for chunk in chunks]

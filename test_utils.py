@@ -1,26 +1,6 @@
-import numpy as np
 import pytest
 
-from utils import (flatten, get_first_and_last_from_iterator, intervals_where,
-                   timerepr)
-
-
-def test_first_and_last_from_iter():
-    assert get_first_and_last_from_iterator(iter([1, 2, 3, 4])) == (1, 4)
-
-
-BIG = 999
-
-
-@pytest.mark.parametrize('data, intervals', [
-    [[], []],
-    [[0, 0, 0], []],
-    [[0, 1, 2, BIG, BIG, 5, 6, 7, 8, BIG, BIG, BIG], [(3, 5), (9, 12)]],
-])
-def test_intervals_where(data, intervals):
-    data = np.array(data)
-    assert list(intervals_where(data == BIG)) == intervals
-    assert list(intervals_where(data > BIG - 1)) == intervals
+from utils import flatten, timerepr
 
 
 def to_milliseconds(hour, minute, second, millis):
