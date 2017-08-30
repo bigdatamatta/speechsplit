@@ -55,7 +55,9 @@ def test_get_chunks(chunks, target_audible_len):
 
     with patch('silence.save_chunks'):  # simply turn off saving
         assert chunks == get_chunks(audio,
-                                    target_audible_len=target_audible_len)
+                                    target_audible_len=target_audible_len,
+                                    load_if_available=False)
+
         # the sum of chunks is equal to the original audio
         assert audio == sum(audio[c.silence_start:c.end] for c in chunks)
 
