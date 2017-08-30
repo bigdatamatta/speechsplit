@@ -20,8 +20,8 @@ def train_and_score(clf, X_all, y_all):
 
 
 GRID_SEARCH_PARAMETERS = [
-    {'C': [1, 10, 100], 'kernel': ['linear']},
-    {'C': [1, 10, 100], 'kernel': ['rbf'], 'gamma': [0.01, 0.001, 0.0001]},
+    {'C': [1, 10], 'kernel': ['linear']},
+    {'C': [1, 10], 'kernel': ['rbf'], 'gamma': [0.01, 0.001, 0.0001]},
 ]
 
 
