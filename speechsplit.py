@@ -58,7 +58,7 @@ def get_features(audio, max_windows_per_segment=10 * 6000):  # 6000 -> 1 min
 
     :returns: 2 values:
         first value is a numpy array
-        with the MFCC coefficients (from 2nd to 12th) for the windowed audio
+        with the MFCC coefficients (from 2nd to 13th) for the windowed audio
 
         second value is a numpy array with the same length
         with the loudness measurements (in dBFS)
@@ -69,7 +69,7 @@ def get_features(audio, max_windows_per_segment=10 * 6000):  # 6000 -> 1 min
         return python_speech_features.mfcc(signal, segment.frame_rate,
                                            winlen=WINDOW_LENGTH / 1000.0,
                                            winstep=WINDOW_STEP / 1000.0,
-                                           appendEnergy=False)[:, 1:13]
+                                           appendEnergy=False)[:, 1:]
 
     # Build mfcc in slices to avoid out of memory issues
     # We need some margin before and after the slices,
@@ -82,7 +82,7 @@ def get_features(audio, max_windows_per_segment=10 * 6000):  # 6000 -> 1 min
     audio_margin = mfcc_margin * WINDOW_STEP
     audio_segmentation_size = max_windows_per_segment * WINDOW_STEP
 
-    ranges = [(0 if start == 0 else start - audio_margin,  # splice start
+    ranges = [(0 if start == 0 else start - audio_margin,  # slice start
                start + audio_segmentation_size + audio_margin,   # slice end
                0 if start == 0 else mfcc_margin  # result offset
                )

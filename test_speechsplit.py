@@ -62,7 +62,10 @@ get_features = get_features.__wrapped__
 
 
 @pytest.mark.parametrize('size', [100, 333])
-def test_split_does_not_change_get_features(size):
+def test_segmentation_does_not_change_get_features(size):
+    '''The segmentation made to avoid out of memory
+    does not affect the the final result'''
+
     assert len(AUDIO_STUB) == 10100
     mfcc1, loud1 = get_features(AUDIO_STUB)  # no segmentation
     mfcc2, loud2 = get_features(
@@ -72,7 +75,7 @@ def test_split_does_not_change_get_features(size):
 
 
 @pytest.mark.xfail(raises=AssertionError)
-def test_split_too_small_in_get_features():
+def test_segmentation_too_small_in_get_features():
     get_features(AUDIO_STUB, max_windows_per_segment=10)
 
 
