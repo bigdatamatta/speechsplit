@@ -38,21 +38,26 @@ class Chunk(Bunch):
                      self.truth, self.label))
 
 
-def get_audio_id(audio):
+def get_audio_hash(audio):
     return sha1(audio.get_array_of_samples()).hexdigest()[:10]
 
 
-CACHE_DIR = '.cache'
+DATA_DIR = 'data'
 
 
 def get_audio_chunks_filename(audio):
-    audio_id = get_audio_id(audio)
-    return '{}/{}.chunks.yaml'.format(CACHE_DIR, audio_id)
+    chunks_extension = '.chunks.yaml'
+    if hasattr(audio, 'filename'):
+        basename = os.path.splitext(audio.filename)[0]
+        return basename + chunks_extension
+    else:
+        audio_id = os.path.join(DATA_DIR, get_audio_hash(audio))
+    return '{}/{}.chunks.yaml'.format(DATA_DIR, audio_id)
 
 
 def save_chunks(audio, chunks):
-    if not os.path.exists(CACHE_DIR):
-        os.makedirs(CACHE_DIR)
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
     filename = get_audio_chunks_filename(audio)
     with open(filename, 'w') as chunks_file:
         yaml.safe_dump(chunks, chunks_file)

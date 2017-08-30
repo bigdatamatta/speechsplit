@@ -79,3 +79,9 @@ def load_yaml(filename):
 
 def to_segments(audio, chunks):
     return [chunk.cut(audio) for chunk in chunks]
+
+
+def load_audio(filename):
+    audio = AudioSegment.from_wav(filename)
+    audio.filename = filename
+    return audio
