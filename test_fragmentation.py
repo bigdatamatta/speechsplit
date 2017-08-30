@@ -2,8 +2,8 @@ import pytest
 from mock import MagicMock, patch
 from pydub.generators import Sine
 
-from silence import (Chunk, detect_silence_and_audible, get_chunks,
-                     load_chunks, save_chunks)
+from fragmentation import (Chunk, detect_silence_and_audible, get_chunks,
+                           load_chunks, save_chunks)
 
 
 @pytest.mark.parametrize('silence_ranges, split_ranges', [
@@ -27,7 +27,7 @@ def test_detect_silence_and_audible(silence_ranges, split_ranges):
     audio_stub = MagicMock()
     audio_stub.__len__.return_value = 100
 
-    with patch('silence.detect_silence',
+    with patch('fragmentation.detect_silence',
                return_value=silence_ranges) as mock_detect_silence:
 
         assert split_ranges == [
@@ -53,7 +53,7 @@ get_chunks = get_chunks.__wrapped__  # remove lru cache for testing
 def test_get_chunks(chunks, target_audible_len):
     audio = LO + HI * 2 + LO[:400] + HI * 2 + LO + HI * 10
 
-    with patch('silence.save_chunks'):  # simply turn off saving
+    with patch('fragmentation.save_chunks'):  # simply turn off saving
         assert chunks == get_chunks(audio,
                                     target_audible_len=target_audible_len,
                                     load_if_available=False)
@@ -66,6 +66,6 @@ def test_save_and_load_fragments(tmpdir):
     audio = HI
     chunks = [Chunk(0, 1, 2, 3),
               Chunk(5, 6, 7, 8, 'TRUTH', ['speaker', .9])]
-    with patch('silence.CACHE_DIR', str(tmpdir)):
+    with patch('fragmentation.CACHE_DIR', str(tmpdir)):
         save_chunks(audio, chunks)
         assert chunks == load_chunks(audio)

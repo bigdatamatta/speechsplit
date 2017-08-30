@@ -13,7 +13,7 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 from sklearn.svm import SVC
 
-from silence import Chunk, get_chunks
+from fragmentation import Chunk, get_chunks
 from utils import flatten, intervals_where, play, save_yaml, timerepr
 
 # DATA TREATMENT  #######################################################
