@@ -3,14 +3,14 @@ from collections import defaultdict
 from math import ceil
 
 import numpy as np
+import pandas as pd
 import python_speech_features
 from choice import Menu
 from functools32 import lru_cache
-from pydub import AudioSegment
 from sklearn.svm import SVC
 
 from fragmentation import Chunk, get_chunks
-from utils import flatten, play, save_yaml, timerepr
+from utils import flatten, load_audio, play, save_yaml, timerepr
 
 # FEATURES ###################################################################
 
@@ -224,17 +224,47 @@ def copy_chunks(chunks):
 
 def error_in_chunks(chunks):
     wrong = [c for c in chunks if c.truth != c.label[0]]
-    return len(wrong) / float(len(chunks))
+    num_proportion = len(wrong) / float(len(chunks))
+
+    def total_len(some_chunks):
+        return sum(c.len for c in some_chunks)
+    time_proportion = total_len(wrong) / float(total_len(chunks))
+    return num_proportion, time_proportion
 
 
-def refit_from_best(clf, audio, percentile=5):
-    remaining = chunks = get_chunks(audio)
+def refit_from_best(clf, audio, percentile=5, limit=1000, evolution=None):
+    '''
+    Incrementally:
+        * refit the classifier with the percentile chunks
+          that best labeled (that have higher labeling probabilities)
+        * repredic all chunks
+        * store stages in evolution
+
+        Stops when any of the following happens:
+            * limit iterations were done
+            * there is no more remaining "best" chunks of at least one voice
+              to use as trainning base
+            * there is no more chunks at all remaining to use as trainning base
+
+    Note we consider just chunks of at least 1 second to select the "best",
+    so we improve learning just on those.
+    '''
+
     features = get_features(audio)
-    labeled = []
-    evolution = []
+
+    if evolution:
+        # restore the state of last iteration
+        labeled, remaining, chunks = evolution[-1]
+    else:
+        evolution = []
+        labeled = []
+        remaining = chunks = get_chunks(audio)
 
     try:
-        while(remaining):
+        for iteration in range(limit):
+            if not remaining:
+                break
+
             if not labeled:
                 # begin with just pre labeled data
                 labeled = flatten(
@@ -267,20 +297,30 @@ def refit_from_best(clf, audio, percentile=5):
     except Exception as e:
         print("XXXX ERROR XXXX. "
               "Couldn't proceed after percentile: ", percentile)
-        print e
+        print (e)
 
-    print('\nThese were the error percentages in chunk classification'
-          ' at each percentile:')
-    print('iteration | in labeled | in remaining | in all chunks')
-    for i, (labeled, remaining, chunks) in enumerate(evolution):
-        print(i, error_in_chunks(labeled),
-              error_in_chunks(remaining), error_in_chunks(chunks))
+    print('\nThese were the error proportions in chunk classification'
+          ' at each iteration,\n'
+          'by number of chunks and total time:\n')
+    print(report_on_evolution_of_refit_from_best(evolution))
+
     return evolution
+
+
+def report_on_evolution_of_refit_from_best(evolution):
+    return pd.DataFrame(
+        [flatten([error_in_chunks(labeled),
+                  error_in_chunks(remaining),
+                  error_in_chunks(chunks)])
+         for labeled, remaining, chunks in evolution],
+        columns=['{} ({})'.format(group, kind)
+                 for group in ['trainning', 'remaining', 'all']
+                 for kind in ['N', 'Time']])
 
 
 def load_run_experiment_and_save(filename):
     clf = SVC(C=1, gamma=0.001, kernel='rbf', random_state=0)
-    audio = AudioSegment.from_wav(filename)
+    audio = load_audio(filename)
 
     evolution = refit_from_best(clf, audio)
 
