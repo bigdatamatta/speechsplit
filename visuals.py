@@ -6,7 +6,7 @@ from utils import intervals_where
 # 12 linhas = 1 min
 
 
-def plot_mask_multiline(mask, columns=500):
+def plot_mask_multiline(mask, columns=500, facecolors='blue'):
     '''Plots a sequence of boolean values spanning multiple lines.
 
     The contiguous True values are aggregated into blocks and the False values
@@ -22,6 +22,4 @@ def plot_mask_multiline(mask, columns=500):
 
     plt.axis([0, columns, len(lines_of_xranges), 0])
     for offset, xranges in enumerate(lines_of_xranges):
-        plt.broken_barh(
-            xranges, (offset, 0.8),
-            facecolors=('blue', 'red', 'yellow', 'green') * len(xranges))
+        plt.broken_barh(xranges, (offset, 0.8), facecolors=facecolors)
