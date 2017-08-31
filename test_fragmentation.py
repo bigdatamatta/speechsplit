@@ -66,6 +66,6 @@ def test_save_and_load_fragments(tmpdir):
     audio = HI
     chunks = [Chunk(0, 1, 2, 3),
               Chunk(5, 6, 7, 8, 'TRUTH', ['speaker', .9])]
-    with patch('fragmentation.CACHE_DIR', str(tmpdir)):
+    with patch('fragmentation.DATA_DIR', str(tmpdir)):
         save_chunks(audio, chunks)
         assert chunks == load_chunks(audio)
