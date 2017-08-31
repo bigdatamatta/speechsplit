@@ -183,13 +183,12 @@ def refit(clf, features, training_chunks):
 
 def refit_and_predict_chunks(clf, features, training_chunks, chunks):
     start_time = timeit.default_timer()
-    print('.......... refit and re-predict started ..........')
 
     refit(clf, features, training_chunks)
     predict_chunks(clf, features, chunks)
 
     elapsed = timeit.default_timer() - start_time
-    print('---------- refit and re-predict DONE (in {}) ----------'.format(
+    print('Refit and re-predict DONE (in {})'.format(
         timerepr(int(elapsed * 1000))
     ))
 
@@ -288,26 +287,23 @@ def refit_from_best(clf, audio, percentile=5, limit=1000, evolution=None):
             refit_and_predict_chunks(clf, features, training_chunks, chunks)
             # important to make a copy of chunks because it changes over time
             evolution.append(map(copy_chunks, (labeled, remaining, chunks)))
-            print(':::::: ', map(len, (labeled, remaining, chunks)))
-            # print(map(lambda x: len(x) / float(len(chunks)),
-            #           (labeled, remaining, chunks)))
-            print(error_in_chunks(labeled),
-                  error_in_chunks(remaining), error_in_chunks(chunks))
+            _, error_time = error_in_chunks(chunks)
+            print('Retrained on {:.2%} of fragments. Error: {:.2%}'.format(
+                len(labeled) / float(len(chunks)), error_time))
 
     except Exception as e:
         print("XXXX ERROR XXXX. "
               "Couldn't proceed after percentile: ", percentile)
         print (e)
 
-    print('\nThese were the error proportions in chunk classification'
-          ' at each iteration,\n'
-          'by number of chunks and total time:\n')
-    print(report_on_evolution_of_refit_from_best(evolution))
-
     return evolution
 
 
 def report_on_evolution_of_refit_from_best(evolution):
+    '''A DataFrame with the error proportions of refit by best
+    at each iteration and group
+    by number of chunks and total time'''
+
     return pd.DataFrame(
         [flatten([error_in_chunks(labeled),
                   error_in_chunks(remaining),
