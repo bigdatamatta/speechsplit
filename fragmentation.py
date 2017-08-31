@@ -52,7 +52,7 @@ def get_audio_chunks_filename(audio):
         return basename + chunks_extension
     else:
         audio_id = os.path.join(DATA_DIR, get_audio_hash(audio))
-    return '{}/{}.chunks.yaml'.format(DATA_DIR, audio_id)
+        return audio_id + chunks_extension
 
 
 def save_chunks(audio, chunks):
